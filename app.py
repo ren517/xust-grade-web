@@ -3,10 +3,13 @@ from fastapi.templating import Jinja2Templates
 
 import sys
 
-from fastapi import FastAPI, Request, Form, Depends
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
 from config import (
     ADMIN_USER,
     ADMIN_PASSWORD,
@@ -14,6 +17,7 @@ from config import (
     XH,
     NAME
 )
+
 
 # ======================
 # 引入核心代码
@@ -46,6 +50,8 @@ app = FastAPI(
 
 # ======================
 # Session
+# 注意：
+# SessionMiddleware必须先添加
 # ======================
 
 app.add_middleware(
@@ -54,10 +60,8 @@ app.add_middleware(
 
     secret_key=SECRET_KEY,
 
-    # 本地测试False
-    # HTTPS上线改True
-
-    https_only=False,
+    # 公网HTTPS
+    https_only=True,
 
     same_site="lax"
 
@@ -65,9 +69,87 @@ app.add_middleware(
 
 
 
+
+
+# ======================
+# 登录保护
+# ======================
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+
+
+    async def dispatch(
+            self,
+            request,
+            call_next
+    ):
+
+
+        path = request.url.path
+
+
+
+        # 放行
+
+        allow = [
+
+            "/login",
+
+            "/static"
+
+        ]
+
+
+
+        if any(
+            path.startswith(x)
+            for x in allow
+        ):
+
+            return await call_next(request)
+
+
+
+
+        # 检查登录状态
+
+
+        if not request.session.get("login"):
+
+
+            return RedirectResponse(
+
+                "/login",
+
+                status_code=302
+
+            )
+
+
+
+        return await call_next(request)
+
+
+
+
+
+# 必须最后添加
+# 后添加的先执行
+
+app.add_middleware(
+    AuthMiddleware
+)
+
+
+
+
+
+
 # ======================
 # 静态文件
 # ======================
+
 
 app.mount(
 
@@ -87,20 +169,8 @@ templates = Jinja2Templates(
     directory="templates"
 )
 
-# ======================
-# 登录检查
-# ======================
 
-def check_login(
-        request: Request
-):
 
-    if not request.session.get("login"):
-
-        return RedirectResponse(
-            "/login",
-            status_code=302
-        )
 
 
 
@@ -108,10 +178,12 @@ def check_login(
 # 登录页面
 # ======================
 
+
 @app.get("/login")
 def login_page(
-        request: Request
+        request:Request
 ):
+
 
     return templates.TemplateResponse(
 
@@ -130,7 +202,7 @@ def login_page(
 @app.post("/login")
 def login(
 
-        request: Request,
+        request:Request,
 
         username:str=Form(...),
 
@@ -153,6 +225,7 @@ def login(
         request.session["login"] = True
 
 
+
         return RedirectResponse(
 
             "/",
@@ -160,6 +233,7 @@ def login(
             status_code=302
 
         )
+
 
 
 
@@ -183,16 +257,23 @@ def login(
 
 
 
+
+
 # ======================
 # 登出
 # ======================
 
+
 @app.get("/logout")
 def logout(
+
         request:Request
+
 ):
 
+
     request.session.clear()
+
 
 
     return RedirectResponse(
@@ -207,16 +288,18 @@ def logout(
 
 
 
+
+
+
 # ======================
 # 首页
 # ======================
 
+
 @app.get("/")
 def index(
 
-        request:Request,
-
-        user=Depends(check_login)
+        request:Request
 
 ):
 
@@ -240,28 +323,36 @@ def index(
 
 
 
+
+
+
+
 # ======================
 # 成绩查询
 # ======================
 
+
 @app.get("/score")
 def score(
 
-        request:Request,
-
-        user=Depends(check_login)
+        request:Request
 
 ):
 
 
-    xh=XH
+    xh = XH
 
-    name=NAME
+    name = NAME
+
 
 
 
     login_client = JWXTLogin()
 
+
+
+
+    # 加载教务系统Cookie
 
 
     load_cookie(
@@ -271,6 +362,8 @@ def score(
         xh
 
     )
+
+
 
 
 
@@ -284,11 +377,17 @@ def score(
 
 
 
+
     if result is None:
 
+
         return HTMLResponse(
+
             "成绩查询失败"
+
         )
+
+
 
 
 
@@ -297,14 +396,19 @@ def score(
 
 
 
+
+
     # ======================
     # 查询历史
     # ======================
 
-    new_courses=[]
+
+    new_courses = []
+
 
 
     history = load_history(xh)
+
 
 
 
@@ -322,17 +426,23 @@ def score(
 
 
 
+
+
     else:
 
+
         print(
-            "第一次网页查询"
+            "第一次查询"
         )
 
 
 
 
+
+
+
     # ======================
-    # 更新web自己的history
+    # 保存网页查询历史
     # ======================
 
 
@@ -350,6 +460,7 @@ def score(
 
 
 
+
     return templates.TemplateResponse(
 
         request=request,
@@ -358,14 +469,17 @@ def score(
 
         context={
 
+
             "courses":
 
             courses,
 
 
+
             "new_courses":
 
             new_courses
+
 
         }
 

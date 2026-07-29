@@ -25,8 +25,8 @@ sys.path.append("core")
 
 from score import select_score
 from login import JWXTLogin
-from cookie_manager import load_cookie
-
+from cookie_manager import load_cookie, load_users
+from main import login_user
 from history import (
     load_history,
     save_history,
@@ -198,8 +198,10 @@ def index(request: Request):
 def score(request: Request):
     xh = XH
     name = NAME
-
-    login_client = JWXTLogin()
+    
+    users = load_users()
+    user = users[0]
+    login_client = login_user(user)
 
     # 加载教务系统Cookie
     load_cookie(

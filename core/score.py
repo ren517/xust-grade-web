@@ -1,14 +1,11 @@
 import requests
 import time
 import pandas as pd
-
+from config import XNM,XQM
 from bs4 import BeautifulSoup
 
 
 BASE_URL = "http://59.74.174.150/jwglxt/"
-
-XNM = "2025"
-XQM = "12"
 
 
 

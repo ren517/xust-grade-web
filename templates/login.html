@@ -1,56 +1,61 @@
-<!DOCTYPE html>
+{% extends "base.html" %}
 
-<html>
+{% block title %}登录 · 西科大教务助手{% endblock %}
 
-<head>
+{% block body_class %}page-login{% endblock %}
 
-<meta charset="UTF-8">
+{% block nav %}{# 登录页不显示导航栏 #}{% endblock %}
 
-<title>
-登录
-</title>
+{% block content %}
+<div class="auth-wrap">
+    {# 极光渐变光斑：纯 CSS 动效，尊重 prefers-reduced-motion #}
+    <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
 
-</head>
+    <div class="auth-card reveal">
+        <div class="auth-logo" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/><path d="M22 10v6"/></svg>
+        </div>
 
+        <h1 class="auth-title">欢迎回来</h1>
+        <p class="auth-sub">登录西科大教务助手，查询你的最新成绩</p>
 
-<body>
+        {% if error %}
+        <div class="alert" role="alert">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            {{ error }}
+        </div>
+        {% endif %}
 
+        <form method="post" action="/login">
+            <div class="field">
+                <label for="username">用户名</label>
+                <div class="input-wrap">
+                    <span class="icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </span>
+                    <input id="username" name="username" type="text" required autocomplete="username"
+                           placeholder="请输入用户名" value="{{ username or '' }}">
+                </div>
+            </div>
 
-<h2>
-西科大成绩助手
-</h2>
+            <div class="field">
+                <label for="password">密码</label>
+                <div class="input-wrap">
+                    <span class="icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <input id="password" name="password" type="password" required autocomplete="current-password"
+                           placeholder="请输入密码">
+                </div>
+            </div>
 
+            <button type="submit" class="btn btn-primary btn-block">
+                登 录
+                <span class="arrow" aria-hidden="true">→</span>
+            </button>
+        </form>
 
-<form method="post">
-
-
-用户名:
-
-<input name="username">
-
-
-<br><br>
-
-
-密码:
-
-<input 
-type="password"
-name="password"
->
-
-
-<br><br>
-
-
-<button>
-登录
-</button>
-
-
-</form>
-
-
-</body>
-
-</html>
+        <p class="auth-foot">西安科技大学 · 教务成绩查询系统</p>
+    </div>
+</div>
+{% endblock %}

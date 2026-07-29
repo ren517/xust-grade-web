@@ -1,0 +1,17 @@
+{# 共享宏 #}
+
+{# 按分数段渲染不同色彩的成绩徽章（兼容数字分与等级制成绩） #}
+{% macro score_pill(cj) %}
+    {%- set v = cj | float(-1) -%}
+    {%- set levels = {"优秀": "pill-great", "良好": "pill-good", "中等": "pill-mid",
+                      "及格": "pill-pass", "合格": "pill-pass",
+                      "不及格": "pill-fail", "不合格": "pill-fail"} -%}
+    {%- if v < 0 -%}{% set cls = levels.get(cj | string | trim, "pill-na") %}
+    {%- elif v >= 90 -%}{% set cls = "pill-great" %}
+    {%- elif v >= 80 -%}{% set cls = "pill-good" %}
+    {%- elif v >= 70 -%}{% set cls = "pill-mid" %}
+    {%- elif v >= 60 -%}{% set cls = "pill-pass" %}
+    {%- else -%}{% set cls = "pill-fail" %}
+    {%- endif -%}
+    <span class="pill {{ cls }}">{{ cj }}</span>
+{% endmacro %}

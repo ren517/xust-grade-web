@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}课程进度 · 西科大教务助手{% endblock %}
+
+{% from "_macros.html" import score_pill %}
+
+{% block content %}
+<main class="container">
+
+    <div class="page-head reveal">
+        <div>
+            <h1 class="page-title">课程进度</h1>
+            <p class="page-sub">课表：本地静态数据 · 成绩：每次刷新实时同步</p>
+        </div>
+        <a href="/progress" class="btn btn-ghost" title="重新实时获取成绩">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            重新查询
+        </a>
+    </div>
+
+    {% if not schedule_synced %}
+    <div class="notice notice-amber reveal" style="--d:.1s" role="status">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        课表数据尚未同步，无法统计课程总数。请先到
+        <a href="/schedule/refresh" style="font-weight:700; text-decoration:underline;">每日课表</a>
+        同步一次课表。
+    </div>
+    {% else %}
+
+    {% if score_error %}
+    <div class="notice notice-amber reveal" style="--d:.1s" role="status">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        成绩实时获取失败（教务系统可能繁忙），以下仅展示课表数据，稍后可点「重新查询」重试。
+    </div>
+    {% endif %}
+
+    {# ================= 统计概览 ================= #}
+    <section class="stat-grid" aria-label="课程进度统计">
+        <div class="card stat reveal" style="--d:.05s">
+            <div class="stat-label">本学期课程</div>
+            <div class="stat-value">{{ total }}</div>
+            <div class="stat-hint">课表去重后总数</div>
+        </div>
+        <div class="card stat reveal" style="--d:.1s">
+            <div class="stat-label">已出成绩</div>
+            <div class="stat-value">{{ done_count }}</div>
+            <div class="stat-hint">成绩已公布</div>
+        </div>
+        <div class="card stat reveal" style="--d:.15s">
+            <div class="stat-label">未出成绩</div>
+            <div class="stat-value">{{ pending | length }}</div>
+            <div class="stat-hint">静待出分</div>
+        </div>
+        <div class="card stat reveal" style="--d:.2s">
+            <div class="stat-label">出分进度</div>
+            <div class="stat-value">{{ percent }}<small style="font-size:.5em;">%</small></div>
+            <div class="stat-hint">实时统计</div>
+        </div>
+    </section>
+
+    {# ================= 进度条 ================= #}
+    <section class="card card-pad progress-card reveal" style="--d:.25s" aria-label="出分进度条">
+        <div class="progress-meta">
+            <span>本学期出分进度</span>
+            <span><b>{{ done_count }}</b> / {{ total }} 门 · {{ percent }}%</span>
+        </div>
+        <div class="bar progress-track">
+            <i style="width: {{ percent }}%"></i>
+        </div>
+    </section>
+
+    {# ================= 未出成绩 ================= #}
+    <section class="section reveal" style="--d:.3s" aria-labelledby="sec-pending">
+        <h2 class="section-title" id="sec-pending">未出成绩</h2>
+
+        {% if pending %}
+        <p class="section-sub">还有 {{ pending | length }} 门课未出分，耐心等等 ⏳</p>
+        <div class="feature-grid">
+            {% for c in pending %}
+            <article class="card card-hover feature">
+                <div class="cc-head" style="margin-bottom:0; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                    <div>
+                        <h3 style="font-size:16px;">{{ c.kcmc }}</h3>
+                        <span style="font-size:13px; color:var(--muted);">
+                            {{ c.xm or "—" }} 老师 · {{ c.xf }} 学分
+                        </span>
+                    </div>
+                    {% if c.khfsmc %}<span class="badge badge-soft">{{ c.khfsmc }}</span>{% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="notice notice-teal" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            全部课程都已出分，本学期圆满收官 🎓
+        </div>
+        {% endif %}
+    </section>
+
+    {# ================= 已出成绩 ================= #}
+    {% if done %}
+    <section class="section reveal" style="--d:.35s" aria-labelledby="sec-done">
+        <h2 class="section-title" id="sec-done">已出成绩</h2>
+        <p class="section-sub">{{ done_count }} 门 · 实时来自教务系统</p>
+
+        <div class="feature-grid">
+            {% for c in done %}
+            <article class="card card-hover feature">
+                <div class="cc-head" style="margin-bottom:0; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                    <div>
+                        <h3 style="font-size:16px;">{{ c.kcmc }}</h3>
+                        <span style="font-size:13px; color:var(--muted);">
+                            {{ c.xf }} 学分{% if c.score.xfjd %} · 绩点 {{ c.score.xfjd }}{% endif %}
+                        </span>
+                    </div>
+                    {{ score_pill(c.score.cj) }}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    {% endif %}
+
+    <footer class="footer">
+        西科大教务助手 · 数据来源于学校教务系统，仅供个人学习使用
+    </footer>
+
+</main>
+{% endblock %}

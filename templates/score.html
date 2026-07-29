@@ -1,119 +1,159 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <title>成绩查询</title>
-    <style>
-        body {
-            font-family: "Microsoft YaHei", Arial, sans-serif;
-            margin: 30px;
-        }
+{% block title %}成绩查询 · 西科大教务助手{% endblock %}
 
-        h1 {
-            text-align: center;
-        }
+{% from "_macros.html" import score_pill %}
 
-        h2 {
-            margin-top: 30px;
-        }
+{% block content %}
+<main class="container">
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-top: 15px;
-        }
+    <div class="page-head reveal">
+        <div>
+            <a class="back-link" href="/">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                返回首页
+            </a>
+            <h1 class="page-title">我的成绩</h1>
+            <p class="page-sub">数据来源：教务系统 · 实时同步</p>
+        </div>
+        <a href="/score" class="btn btn-ghost">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            重新查询
+        </a>
+    </div>
 
-        th,
-        td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: center;
-        }
+    {# ================= 统计概览 ================= #}
+    <section class="stat-grid" aria-label="成绩统计概览">
+        <div class="card stat reveal" style="--d:.05s">
+            <div class="stat-label">课程总数</div>
+            <div class="stat-value">{{ stats.count }}</div>
+            <div class="stat-hint">门已出分课程</div>
+        </div>
+        <div class="card stat reveal" style="--d:.1s">
+            <div class="stat-label">累计学分</div>
+            <div class="stat-value">{{ stats.credits }}</div>
+            <div class="stat-hint">已修读学分</div>
+        </div>
+        <div class="card stat reveal" style="--d:.15s">
+            <div class="stat-label">加权平均绩点</div>
+            <div class="stat-value">{% if stats.gpa is not none %}{{ stats.gpa }}{% else %}—{% endif %}</div>
+            <div class="stat-hint">按学分加权计算</div>
+        </div>
+        <div class="card stat reveal" style="--d:.2s">
+            <div class="stat-label">新增成绩</div>
+            <div class="stat-value">{{ stats.new_count }}</div>
+            <div class="stat-hint">较上次查询</div>
+        </div>
+    </section>
 
-        th {
-            background: #f5f5f5;
-        }
+    {# ================= 成绩变化 ================= #}
+    <section class="section reveal" style="--d:.25s" aria-labelledby="sec-new">
+        <h2 class="section-title" id="sec-new">成绩变化</h2>
 
-        tr:hover {
-            background: #f0f8ff;
-        }
+        {% if new_courses %}
+        <div class="notice notice-amber" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+            发现 <b>{{ new_courses|length }}</b> 门新增成绩，快来看看吧
+        </div>
 
-        .new {
-            background: #fff4e5;
-        }
+        <div class="feature-grid">
+            {% for c in new_courses %}
+            <article class="card card-hover feature" style="--d:0s">
+                <div class="cc-head" style="margin-bottom:0; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                    <div>
+                        <h3 style="font-size:16px;">{{ c.kcmc }}</h3>
+                        <span style="font-size:13px; color:var(--muted);">学分 {{ c.xf }}</span>
+                    </div>
+                    {{ score_pill(c.cj) }}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="notice notice-teal" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            暂无新增成绩，与上次查询结果一致
+        </div>
+        {% endif %}
+    </section>
 
-        a {
-            text-decoration: none;
-            color: #0066cc;
-        }
-    </style>
-</head>
+    {# ================= 全部课程 ================= #}
+    <section class="section reveal" style="--d:.3s" aria-labelledby="sec-all">
+        <h2 class="section-title" id="sec-all">全部课程</h2>
+        <p class="section-sub">共 {{ stats.count }} 门 · 悬停行可高亮，移动端自动切换为卡片视图</p>
 
-<body>
-    <h1>📚 我的成绩</h1>
+        {# ---- 桌面端：表格视图 ---- #}
+        <div class="card table-card">
+            <div class="table-wrap">
+                <table class="score-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">课程名称</th>
+                            <th scope="col">课程性质</th>
+                            <th scope="col">学分</th>
+                            <th scope="col">成绩</th>
+                            <th scope="col">绩点</th>
+                            <th scope="col">平时</th>
+                            <th scope="col">期中</th>
+                            <th scope="col">期末</th>
+                            <th scope="col">总评</th>
+                            <th scope="col">出分时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in courses %}
+                        <tr {% if c in new_courses %}class="row-new"{% endif %}>
+                            <td class="course-name">
+                                {{ c.kcmc }}
+                                {% if c in new_courses %}<span class="tag-new">NEW</span>{% endif %}
+                            </td>
+                            <td>{{ c.kcxzmc }}</td>
+                            <td>{{ c.xf }}</td>
+                            <td>{{ score_pill(c.cj) }}</td>
+                            <td>{{ c.xfjd }}</td>
+                            <td>{{ c["平时成绩"] if "平时成绩" in c else "—" }}</td>
+                            <td>{{ c["期中成绩"] if "期中成绩" in c else "—" }}</td>
+                            <td>{{ c["期末成绩"] if "期末成绩" in c else "—" }}</td>
+                            <td>{{ c["总评成绩"] if "总评成绩" in c else "—" }}</td>
+                            <td>{{ c.cjbdsj }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-    <!-- ====================== -->
-    <!-- 成绩变化               -->
-    <!-- ====================== -->
-    <h2>📈 成绩变化</h2>
+        {# ---- 移动端：卡片视图 ---- #}
+        <div class="course-cards">
+            {% for c in courses %}
+            <article class="card course-card">
+                <div class="cc-head">
+                    <div>
+                        <div class="cc-title">{{ c.kcmc }}</div>
+                        <div class="cc-type">{{ c.kcxzmc }} · {{ c.cjbdsj }}</div>
+                    </div>
+                    {{ score_pill(c.cj) }}
+                </div>
+                <div class="cc-grid">
+                    <div class="cc-item"><div class="k">学分</div><div class="v">{{ c.xf }}</div></div>
+                    <div class="cc-item"><div class="k">平时</div><div class="v">{{ c["平时成绩"] if "平时成绩" in c else "—" }}</div></div>
+                    <div class="cc-item"><div class="k">期中</div><div class="v">{{ c["期中成绩"] if "期中成绩" in c else "—" }}</div></div>
+                    <div class="cc-item"><div class="k">期末</div><div class="v">{{ c["期末成绩"] if "期末成绩" in c else "—" }}</div></div>
+                    <div class="cc-item"><div class="k">总评</div><div class="v">{{ c["总评成绩"] if "总评成绩" in c else "—" }}</div></div>
+                </div>
+                {% set jd = c.xfjd | float(0) %}
+                <div class="cc-gpa">
+                    <div class="meta"><span>绩点</span><span>{{ c.xfjd }} / 5.0</span></div>
+                    <div class="bar"><i style="width: {{ [jd / 5 * 100, 100] | min | round(1) }}%"></i></div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
 
-    {% if new_courses %}
-    <p>发现新增成绩：<b>{{ new_courses|length }}</b> 门</p>
-    <table>
-        <tr>
-            <th>课程名称</th>
-            <th>成绩</th>
-            <th>学分</th>
-        </tr>
-        {% for c in new_courses %}
-        <tr class="new">
-            <td>{{ c.kcmc }}</td>
-            <td>{{ c.cj }}</td>
-            <td>{{ c.xf }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-    <p>✅ 没有新增成绩</p>
-    {% endif %}
+    <footer class="footer">
+        西科大教务助手 · 数据来源于学校教务系统，仅供个人学习使用
+    </footer>
 
-    <!-- ====================== -->
-    <!-- 全部成绩               -->
-    <!-- ====================== -->
-    <h2>📖 全部课程</h2>
-
-    <table>
-        <tr>
-            <th>课程名称</th>
-            <th>课程性质</th>
-            <th>学分</th>
-            <th>成绩</th>
-            <th>绩点</th>
-            <th>平时成绩</th>
-            <th>期中成绩</th>
-            <th>期末成绩</th>
-            <th>总评成绩</th>
-            <th>出分时间</th>
-        </tr>
-        {% for c in courses %}
-        <tr>
-            <td>{{ c.kcmc }}</td>
-            <td>{{ c.kcxzmc }}</td>
-            <td>{{ c.xf }}</td>
-            <td>{{ c.cj }}</td>
-            <td>{{ c.xfjd }}</td>
-            <td>{{ c["平时成绩"] if "平时成绩" in c else "-" }}</td>
-            <td>{{ c["期中成绩"] if "期中成绩" in c else "-" }}</td>
-            <td>{{ c["期末成绩"] if "期末成绩" in c else "-" }}</td>
-            <td>{{ c["总评成绩"] if "总评成绩" in c else "-" }}</td>
-            <td>{{ c.cjbdsj }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <br>
-    <a href="/">⬅ 返回首页</a>
-</body>
-
-</html>
+</main>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}每日课表 · 西科大教务助手{% endblock %}
+
+{% block content %}
+<main class="container">
+
+    <div class="page-head reveal">
+        <div>
+            <h1 class="page-title">每日课表</h1>
+            <p class="page-sub">
+                {{ today_cn }} · {{ weekday_cn }}
+                {% if in_semester %} · 第 {{ semester_week }} 周{% else %} · 学期外{% endif %}
+            </p>
+        </div>
+        <a href="/schedule/refresh" class="btn btn-ghost" title="重新从教务系统爬取课表">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            重新同步课表
+        </a>
+    </div>
+
+    {% if not schedule_synced %}
+    {# ---------- 课表未同步 ---------- #}
+    <div class="notice notice-amber reveal" style="--d:.1s" role="status">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        课表数据尚未同步。点击下方按钮从教务系统获取（只需同步一次，之后读取本地缓存）。
+    </div>
+    <div class="reveal" style="--d:.15s; margin-top:16px;">
+        <a href="/schedule/refresh" class="btn btn-primary">
+            立即同步课表
+            <span class="arrow" aria-hidden="true">→</span>
+        </a>
+    </div>
+
+    {% else %}
+    {# ---------- 今日课程 ---------- #}
+    <section class="section reveal" style="--d:.1s" aria-labelledby="sec-today">
+        <h2 class="section-title" id="sec-today">今日课程</h2>
+
+        {% if not in_semester %}
+        <div class="notice notice-teal" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            当前不在学期周次内（第 {{ semester_week }} 周），今天没有课。
+        </div>
+        {% elif today_courses %}
+        <div class="slot-list">
+            {% for c in today_courses %}
+            <article class="card card-hover slot-card" style="--d:{{ loop.index0 * 0.06 }}s">
+                <div class="slot-jc">
+                    <span class="slot-jc-num">{{ c.jc }}</span>
+                    <span class="slot-jc-week">{{ c.zcd }}</span>
+                </div>
+                <div class="slot-main">
+                    <h3>{{ c.kcmc }}</h3>
+                    <p class="slot-teacher">{{ c.xm or "—" }} 老师 · {{ c.kcxz or "—" }}</p>
+                    <div class="slot-chips">
+                        <span class="chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            {{ c.cdmc or "地点待定" }}
+                        </span>
+                        <span class="chip">{{ c.xf }} 学分</span>
+                        {% if c.khfsmc %}<span class="chip chip-soft">{{ c.khfsmc }}</span>{% endif %}
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="notice notice-teal" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            今天没有课，自由安排 🎉
+        </div>
+        {% endif %}
+    </section>
+
+    {# ---------- 本周课表 ---------- #}
+    <section class="section reveal" style="--d:.2s" aria-labelledby="sec-week">
+        <h2 class="section-title" id="sec-week">本周课表</h2>
+        <p class="section-sub">
+            {% if in_semester %}第 {{ semester_week }} 周 · 已按周次过滤{% else %}学期外 · 展示全部周次安排{% endif %}
+            {% if fetched_at %} · 数据同步于 {{ fetched_at }}{% endif %}
+        </p>
+
+        <div class="week-grid">
+            {% for d in range(1, 8) %}
+            <div class="day-col {% if in_semester and d == today_weekday %}day-today{% endif %}">
+                <div class="day-head">
+                    {{ weekdays[d - 1] }}
+                    {% if in_semester and d == today_weekday %}
+                    <span class="badge badge-teal">今天</span>
+                    {% endif %}
+                </div>
+                {% set day_courses = week_grid[d] %}
+                {% if day_courses %}
+                    {% for c in day_courses %}
+                    <div class="mini-course">
+                        <div class="mc-name">{{ c.kcmc }}</div>
+                        <div class="mc-meta">{{ c.jc }} · {{ c.cdmc or "地点待定" }}</div>
+                        <div class="mc-meta">{{ c.xm or "—" }} · {{ c.zcd }}</div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="day-empty">无课</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <footer class="footer">
+        西科大教务助手 · 课表为本地静态缓存，变更时请手动同步
+    </footer>
+
+</main>
+{% endblock %}

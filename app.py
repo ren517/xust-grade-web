@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from config import (
     ADMIN_USER,
@@ -114,15 +115,49 @@ app.add_middleware(
 
 
 # ======================
-# 静态文件
-# ======================
+# 静态文件（带强缓存头，降低 2GB 小内存机器的重复请求压力）
+# ============================================================
+
+class CachedStaticFiles(StaticFiles):
+    """
+    继承 Starlette 的 StaticFiles，给命中(200)的静态资源追加
+    Cache-Control: public, max-age=86400, immutable。
+
+    效果：浏览器在 24h 内直接读本地磁盘缓存，不再向服务器发请求，
+    对 2GB 内存的小机器尤其友好——少一次连接、少占一点内存与 CPU。
+    """
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+
+        if response.status_code == 200:
+            response.headers.setdefault(
+                "Cache-Control",
+                "public, max-age=86400, immutable"
+            )
+
+        return response
+
 
 app.mount(
     "/static",
-    StaticFiles(
-        directory="static"
-    ),
+    CachedStaticFiles(directory="static"),
     name="static"
+)
+
+
+# ======================
+# 开启 GZip 响应压缩（最外层，压缩所有 HTML/CSS/JS 响应）
+#
+# 在 2GB 内存机器上：
+#   - 默认只对 >= 500 字节的响应压缩，几乎不增加内存占用；
+#   - 800+ 行的 CSS 与整页 HTML 可压缩 60%~75%，显著缩短首屏与滚动加载时间；
+#   - 注册为最外层中间件，确保连 /static 的兜底响应也被压缩。
+# ======================
+
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=500
 )
 
 templates = Jinja2Templates(

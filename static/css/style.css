@@ -1001,10 +1001,23 @@ tr.row-new:hover td { background: rgb(253 243 227 / .85); }
     border-radius: var(--r-sm);
     background: var(--surface-soft);
     border-left: 3px solid var(--primary);
-    transition: transform var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+    cursor: pointer;
+    transition: transform var(--t-fast) var(--ease-out),
+                background var(--t-fast) var(--ease-out),
+                box-shadow var(--t-fast) var(--ease-out),
+                border-color var(--t-fast) var(--ease-out);
 }
-.mini-course:hover { transform: translateX(2px); background: var(--primary-soft); }
+.mini-course:hover {
+    transform: translateY(-2px);
+    background: var(--primary-soft);
+    border-left-color: var(--primary-2);
+    box-shadow: 0 8px 18px -8px rgb(79 70 229 / .45);
+}
+.mini-course:active { transform: translateY(0) scale(.98); }
 .mini-course:last-child { margin-bottom: 0; }
+
+/* 今日课程卡片可点击 */
+.slot-clickable { cursor: pointer; }
 
 .mc-name { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; }
 .mc-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
@@ -1032,6 +1045,134 @@ tr.row-new:hover td { background: rgb(253 243 227 / .85); }
     color: var(--primary-ink);
 }
 .progress-track { height: 14px; }
+
+/* ---------- 课程详情弹窗 ---------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgb(22 26 46 / .45);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-med) var(--ease-out);
+}
+.modal-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.course-modal {
+    width: min(440px, 100%);
+    max-height: 85dvh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-radius: var(--r-lg);
+    box-shadow: 0 28px 64px -20px rgb(22 26 46 / .45);
+    transform: translateY(18px) scale(.96);
+    opacity: 0;
+    transition: transform var(--t-med) var(--ease-out),
+                opacity var(--t-fast) var(--ease-out);
+}
+.modal-overlay.show .course-modal {
+    transform: none;
+    opacity: 1;
+}
+
+.cm-head {
+    position: sticky;
+    top: 0;
+    padding: 20px 24px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.cm-title {
+    margin: 0;
+    padding-right: 42px;
+    font-size: 19px;
+    line-height: 1.4;
+}
+.cm-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+.cm-tags:empty { margin-top: 0; }
+
+.cm-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--slate-soft);
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: background var(--t-fast) var(--ease-out),
+                color var(--t-fast) var(--ease-out),
+                transform var(--t-fast) var(--ease-out);
+}
+.cm-close:hover {
+    background: var(--red-soft);
+    color: var(--red);
+    transform: rotate(90deg);
+}
+
+.cm-body { padding: 12px 24px 22px; }
+.cm-row {
+    display: flex;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14.5px;
+}
+.cm-row:last-child { border-bottom: 0; }
+.cm-label {
+    flex: 0 0 74px;
+    color: var(--muted);
+    font-size: 13.5px;
+    padding-top: 1px;
+}
+.cm-value {
+    flex: 1;
+    font-weight: 600;
+    color: var(--ink);
+    word-break: break-word;
+    line-height: 1.55;
+}
+.cm-value.na { color: #a3a9c4; font-weight: 500; }
+.cm-chip {
+    display: inline-block;
+    padding: 2px 10px;
+    margin: 2px 6px 2px 0;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--primary-ink);
+    background: var(--primary-soft);
+}
+
+@media (max-width: 640px) {
+    .modal-overlay { padding: 14px; align-items: flex-end; }
+    .course-modal {
+        width: 100%;
+        max-height: 80dvh;
+        border-radius: var(--r-lg) var(--r-lg) var(--r-md) var(--r-md);
+    }
+}
 
 /* ---------- 响应式补充 ---------- */
 @media (max-width: 1000px) {

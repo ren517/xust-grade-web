@@ -45,7 +45,9 @@
         {% elif today_courses %}
         <div class="slot-list">
             {% for c in today_courses %}
-            <article class="card card-hover slot-card" style="--d:{{ loop.index0 * 0.06 }}s">
+            <article class="card card-hover slot-card slot-clickable" style="--d:{{ loop.index0 * 0.06 }}s"
+                     data-today-idx="{{ loop.index0 }}" role="button" tabindex="0"
+                     title="点击查看课程详情">
                 <div class="slot-jc">
                     <span class="slot-jc-num">{{ c.jc }}</span>
                     <span class="slot-jc-week">{{ c.zcd }}</span>
@@ -93,7 +95,8 @@
                 {% set day_courses = week_grid[d] %}
                 {% if day_courses %}
                     {% for c in day_courses %}
-                    <div class="mini-course">
+                    <div class="mini-course" data-day="{{ d }}" data-idx="{{ loop.index0 }}"
+                         role="button" tabindex="0" title="点击查看课程详情">
                         <div class="mc-name">{{ c.kcmc }}</div>
                         <div class="mc-meta">{{ c.jc }} · {{ c.cdmc or "地点待定" }}</div>
                         <div class="mc-meta">{{ c.xm or "—" }} · {{ c.zcd }}</div>
@@ -113,4 +116,153 @@
     </footer>
 
 </main>
+
+{% if schedule_synced %}
+{# ---------- 课程详情弹窗（全局唯一实例，同时只显示一个） ---------- #}
+<div class="modal-overlay" id="courseModal">
+    <div class="course-modal" role="dialog" aria-modal="true" aria-labelledby="cmTitle">
+        <div class="cm-head">
+            <h3 class="cm-title" id="cmTitle"></h3>
+            <div class="cm-tags" id="cmTags"></div>
+            <button class="cm-close" id="cmClose" aria-label="关闭">&times;</button>
+        </div>
+        <div class="cm-body" id="cmBody"></div>
+    </div>
+</div>
+
+{# 课程数据：JSON 序列化后由前端解析，避免逐个字段拼属性 #}
+<script id="week-grid-data" type="application/json">{{ week_grid | tojson }}</script>
+<script id="today-data" type="application/json">{{ today_courses | tojson }}</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if schedule_synced %}
+<script>
+(function () {
+    "use strict";
+
+    var NA = "暂无信息";
+
+    function val(v) {
+        if (v === null || v === undefined) return NA;
+        var s = String(v).trim();
+        return s === "" ? NA : s;
+    }
+    function isNA(v) { return val(v) === NA; }
+    function esc(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    var weekData, todayData;
+    try {
+        weekData = JSON.parse(document.getElementById("week-grid-data").textContent);
+        todayData = JSON.parse(document.getElementById("today-data").textContent);
+    } catch (e) {
+        return;
+    }
+
+    var overlay = document.getElementById("courseModal");
+    var mTitle = document.getElementById("cmTitle");
+    var mTags = document.getElementById("cmTags");
+    var mBody = document.getElementById("cmBody");
+    var closeBtn = document.getElementById("cmClose");
+
+    function row(label, value, forceNa) {
+        var na = forceNa || isNA(value);
+        return '<div class="cm-row"><span class="cm-label">' + label + '</span>' +
+            '<span class="cm-value' + (na ? " na" : "") + '">' +
+            (na ? NA : esc(value)) + "</span></div>";
+    }
+
+    function openCard(c) {
+        if (!c) return;
+
+        mTitle.textContent = val(c.kcmc);
+
+        // 标签：课程性质 / 考核方式 / 总学时
+        var tags = [];
+        if (!isNA(c.kcxz)) tags.push(val(c.kcxz));
+        if (!isNA(c.khfsmc) && val(c.khfsmc) !== "未安排") tags.push(val(c.khfsmc));
+        if (!isNA(c.zxs)) tags.push("总学时 " + val(c.zxs));
+        mTags.innerHTML = tags.map(function (t) {
+            return '<span class="badge badge-soft">' + esc(t) + "</span>";
+        }).join("");
+
+        // 上课时间：星期 + 节次
+        var timeStr = NA;
+        var wd = val(c.xqjmc), jcTxt = val(c.jc);
+        if (wd !== NA || jcTxt !== NA) {
+            timeStr = ((wd !== NA ? wd : "") + " " + (jcTxt !== NA ? jcTxt : "")).trim();
+        }
+
+        // 上课班级：按分号拆分为 chip
+        var classRow;
+        if (isNA(c.jxbzc)) {
+            classRow = row("上课班级", c.jxbzc);
+        } else {
+            var classes = String(c.jxbzc).split(/[;；]/).map(function (s) {
+                return s.trim();
+            }).filter(Boolean);
+            classRow = '<div class="cm-row"><span class="cm-label">上课班级</span>' +
+                '<span class="cm-value">' + classes.map(function (cl) {
+                    return '<span class="cm-chip">' + esc(cl) + "</span>";
+                }).join("") + "</span></div>";
+        }
+
+        // 上课地点：教室 + 校区
+        var place = val(c.cdmc);
+        if (place !== NA && !isNA(c.xqmc)) place += "（" + val(c.xqmc) + "）";
+
+        mBody.innerHTML =
+            row("课程名称", c.kcmc) +
+            row("授课老师", c.xm) +
+            row("上课时间", timeStr, timeStr === NA) +
+            row("上课周数", c.zcd) +
+            row("学分", isNA(c.xf) ? c.xf : (val(c.xf) + " 学分"), isNA(c.xf)) +
+            classRow +
+            row("上课地点", place);
+
+        overlay.classList.add("show");
+        document.body.style.overflow = "hidden";
+    }
+
+    function closeCard() {
+        overlay.classList.remove("show");
+        document.body.style.overflow = "";
+    }
+
+    // 本周课表课程块
+    document.querySelectorAll(".mini-course[data-day]").forEach(function (el) {
+        var open = function () {
+            var list = weekData[el.dataset.day];
+            if (list) openCard(list[+el.dataset.idx]);
+        };
+        el.addEventListener("click", open);
+        el.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); }
+        });
+    });
+
+    // 今日课程卡片
+    document.querySelectorAll(".slot-clickable[data-today-idx]").forEach(function (el) {
+        var open = function () { openCard(todayData[+el.dataset.todayIdx]); };
+        el.addEventListener("click", open);
+        el.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); }
+        });
+    });
+
+    // 关闭：按钮 / 点击遮罩 / Esc
+    closeBtn.addEventListener("click", closeCard);
+    overlay.addEventListener("click", function (ev) {
+        if (ev.target === overlay) closeCard();
+    });
+    document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape") closeCard();
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

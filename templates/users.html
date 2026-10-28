@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 · 西科大教务助手{% endblock %}
+
+{% block head %}
+<style>
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 20px;
+        align-items: start;
+    }
+
+    .card h2 {
+        font-size: 17px;
+        margin-bottom: 6px;
+    }
+
+    .card .hint {
+        color: var(--muted);
+        font-size: 13.5px;
+        margin-bottom: 18px;
+    }
+
+    .user-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .user-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .user-list li:last-child { border-bottom: none; }
+
+    .user-list .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .user-list .nm { font-weight: 700; font-size: 15px; }
+    .user-list .xh { color: var(--muted); font-size: 13px; }
+    .user-list .ops { display: flex; align-items: center; gap: 10px; }
+
+    .empty-tip { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+    .check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 18px;
+        font-size: 13.5px;
+        color: var(--muted);
+        cursor: pointer;
+    }
+
+    .check input {
+        width: 15px;
+        height: 15px;
+        accent-color: var(--primary);
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <h1 class="section-title">用户管理</h1>
+        <p class="section-sub">
+            当前登录：{{ web_user or '-' }}
+            {% if current_name %} · 教务账号：{{ current_name }}（{{ current_xh }}）{% endif %}
+        </p>
+
+        {% if msg %}
+        <div class="alert{% if ok %} alert-ok{% endif %}" role="alert">
+            {{ msg }}
+        </div>
+        {% endif %}
+
+        <div class="grid-2">
+            {# 教务账号列表：切换当前账号 #}
+            <div class="card card-pad">
+                <h2>教务账号</h2>
+                <p class="hint">切换后会注销当前账号的会话并重新加载数据</p>
+
+                {% if users %}
+                <ul class="user-list">
+                    {% for u in users %}
+                    <li>
+                        <div class="who">
+                            <span class="nm">{{ u.name }}</span>
+                            <span class="xh">{{ u.xh }}</span>
+                        </div>
+                        <div class="ops">
+                            {% if u.xh|string == current_xh|string %}
+                            <span class="badge">当前</span>
+                            {% else %}
+                            <form method="post" action="/users/switch">
+                                <input type="hidden" name="xh" value="{{ u.xh }}">
+                                <button type="submit" class="btn btn-ghost">切换</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="empty-tip">暂无教务账号，请先在右侧添加。</p>
+                {% endif %}
+            </div>
+
+            {# 添加教务账号 #}
+            <div class="card card-pad">
+                <h2>添加教务账号</h2>
+                <p class="hint">密码为教务系统密码，保存时会加密存储</p>
+
+                <form method="post" action="/users/add">
+                    <div class="field">
+                        <label for="name">姓名</label>
+                        <div class="input-wrap">
+                            <input id="name" name="name" type="text" placeholder="请输入姓名" required>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="xh">学号</label>
+                        <div class="input-wrap">
+                            <input id="xh" name="xh" type="text" placeholder="请输入学号" required>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="password">教务系统密码</label>
+                        <div class="input-wrap">
+                            <input id="password" name="password" type="password" placeholder="请输入密码" required>
+                        </div>
+                    </div>
+
+                    <label class="check">
+                        <input type="checkbox" name="verify" value="1" checked>
+                        保存前登录教务系统验证密码（密码错误则不保存）
+                    </label>
+
+                    <button type="submit" class="btn btn-primary btn-block">
+                        添加账号
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

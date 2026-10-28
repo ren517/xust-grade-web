@@ -348,6 +348,14 @@ a:hover { color: var(--primary); }
     animation: shake .4s var(--ease-out);
 }
 
+/* 成功提示：与 .alert 同结构，绿色变体 */
+.alert-ok {
+    border-color: rgb(22 163 74 / .28);
+    background: #e9f7ef;
+    color: #15803d;
+    animation: none;
+}
+
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }

@@ -148,20 +148,37 @@ def get_schedule(session, xh, force=False, xnm=XNM, xqm=XQM):
 # 学期周次
 # ======================
 
-def semester_start():
-    """开学日期（第一周周一）"""
+def semester_start(override=None):
+    """
+    开学日期（第一周周一）。
+
+    override: 用户在页面设置的「课表开始时间」（YYYY-MM-DD），
+    优先于 config 中的 SEMESTER_START；解析失败时回退默认。
+    """
+    if override:
+        try:
+            return datetime.strptime(str(override), "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
     try:
         return datetime.strptime(str(SEMESTER_START), "%Y-%m-%d").date()
     except ValueError:
         return date(2026, 3, 2)
 
 
-def current_week(today=None):
+def current_week(today=None, start=None):
     """
     今天是学期第几周。返回值 <=0 表示未开学，> MAX_WEEKS 表示学期已结束。
+
+    start: 可选开学日期（date 对象或 YYYY-MM-DD 字符串），
+           用于支持用户在页面自定义「课表开始时间」。
     """
     today = today or date.today()
-    return (today - semester_start()).days // 7 + 1
+
+    base = start if isinstance(start, date) else semester_start(start)
+
+    return (today - base).days // 7 + 1
 
 
 def in_semester(week):
@@ -210,6 +227,16 @@ def parse_weeks(zcd):
             weeks.add(w)
 
     return weeks
+
+
+def max_week(kb_list, default=20):
+    """课表中出现过的最大周次，用于周切换条范围；无数据回退 default"""
+    weeks = set()
+
+    for c in kb_list or []:
+        weeks |= parse_weeks(c.get("zcd"))
+
+    return max(weeks) if weeks else default
 
 
 def parse_jc(jc):

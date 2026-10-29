@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
@@ -12,7 +12,17 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from config import ADMIN_PASSWORD, ADMIN_USER, NAME, SECRET_KEY, WEB_USERS_FILE, XH, XNM, XQM
+from config import (
+    ADMIN_PASSWORD,
+    ADMIN_USER,
+    NAME,
+    SECRET_KEY,
+    SEMESTER_START,
+    WEB_USERS_FILE,
+    XH,
+    XNM,
+    XQM,
+)
 
 # ======================
 # 部署开关
@@ -30,6 +40,7 @@ sys.path.append("./core")
 from core.cookie_manager import clear_cookie, delete_user, find_user, load_users
 from core.history import compare_courses, load_history, save_history
 from core.main import DEFAULT_ENTRY, create_user, login_user
+from core.exam import get_exam, load_exam, normalize
 from core.schedule import (
     WEEKDAY_CN,
     courses_on,
@@ -37,6 +48,7 @@ from core.schedule import (
     get_schedule,
     in_semester,
     load_schedule,
+    max_week,
     normalize_name,
     unique_courses,
     week_grid,
@@ -173,6 +185,108 @@ def _term_label(xnm, xqm):
 def _set_term(request, xnm, xqm):
     request.session["term_xnm"] = xnm
     request.session["term_xqm"] = xqm
+
+
+# ======================
+# 课表开始时间（学期第一周周一，按账号持久化）
+# ======================
+
+SETTINGS_FILE = "data/settings.json"
+
+
+def _load_settings():
+    """读取持久化设置；文件缺失或损坏时返回空字典"""
+
+    os.makedirs(os.path.dirname(SETTINGS_FILE) or ".", exist_ok=True)
+
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+        if isinstance(data, dict):
+            return data
+
+    return {}
+
+
+def _save_settings(data):
+    """设置落盘"""
+
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def _semester_start(request):
+    """
+    当前课表开始时间（第一周周一）
+
+    优先级：session > 按学号持久化的设置 > config.SEMESTER_START
+    """
+
+    value = request.session.get("semester_start")
+
+    if value:
+        return value
+
+    saved = _load_settings().get(str(_current_xh(request))) or {}
+
+    return saved.get("semester_start") or SEMESTER_START
+
+
+def _set_semester_start(request, value):
+    """设置课表开始时间（同时写入 session 与持久化文件）"""
+
+    request.session["semester_start"] = value
+
+    settings = _load_settings()
+    settings.setdefault(str(_current_xh(request)), {})["semester_start"] = value
+
+    _save_settings(settings)
+
+
+# ======================
+# 课表视觉辅助
+# ======================
+
+_COURSE_COLOR_N = 8
+
+
+def _course_color(name):
+    """按课程名稳定映射到 0~7 的配色索引（同名课程永远同色）"""
+
+    h = 0
+
+    for ch in str(name or ""):
+        h = (h * 31 + ord(ch)) & 0xFFFFFF
+
+    return h % _COURSE_COLOR_N
+
+
+def _paint_colors(grid):
+    """给课表网格里的每门课注入配色索引 ci（就地修改）"""
+
+    for day_courses in grid.values():
+
+        for c in day_courses:
+            c["ci"] = _course_color(c.get("kcmc"))
+
+
+def _week_dates(start, week):
+    """某周周一~周日的日期标签列表（M/D），开学时间无效时返回空标签"""
+
+    try:
+        start_date = datetime.strptime(str(start), "%Y-%m-%d").date()
+    except ValueError:
+        return [""] * 7
+
+    return [
+        "{}/{}".format((start_date + timedelta(days=(week - 1) * 7 + d)).month,
+                       (start_date + timedelta(days=(week - 1) * 7 + d)).day)
+        for d in range(7)
+    ]
 
 
 # ======================
@@ -491,7 +605,7 @@ def _date_cn(d):
 @app.get("/")
 def index(request: Request):
     today = date.today()
-    week = current_week(today)
+    week = current_week(today, _semester_start(request))
     weekday = today.isoweekday()
 
     xh = _current_xh(request)
@@ -535,9 +649,12 @@ def index(request: Request):
 
 
 @app.get("/schedule")
-def schedule_page(request: Request):
+def schedule_page(request: Request, w: str = ""):
+    """每日课表：支持 ?w=N 按周查看，底部附本学期考试安排"""
+
     today = date.today()
-    week = current_week(today)
+    start = _semester_start(request)
+    week = current_week(today, start)
     weekday = today.isoweekday()
 
     xh = _current_xh(request)
@@ -547,11 +664,39 @@ def schedule_page(request: Request):
     kb = payload["kbList"] if payload else []
     in_sem = in_semester(week)
 
+    # 当前查看的周次：URL 参数优先，其次真实当前周；越界回退第 1 周
+    max_w = max_week(kb) if kb else 20
+
+    try:
+        sel_week = int(w)
+    except (TypeError, ValueError):
+        sel_week = week if in_sem else 1
+
+    if sel_week < 1 or sel_week > max_w:
+        sel_week = week if (in_sem and 1 <= week <= max_w) else 1
+
     # 已同步：按缓存实际学年/学期展示；否则用 session/默认
     if payload:
         disp_xnm, disp_xqm = payload.get("xnm", XNM), payload.get("xqm", XQM)
     else:
         disp_xnm, disp_xqm = _term(request)
+
+    # 全部周次的课表网格：一次性下发，前端切换周次无需重新请求
+    weeks_data = {str(wk): week_grid(kb, wk) for wk in range(1, max_w + 1)}
+
+    # 按课程名注入稳定配色索引（初始渲染与前端切换周次保持一致）
+    for grid in weeks_data.values():
+        _paint_colors(grid)
+
+    grid_sel = week_grid(kb, sel_week)
+    _paint_colors(grid_sel)
+
+    # 选中周 7 天的日期标签（M/D），用于日列头部
+    week_dates = _week_dates(start, sel_week)
+
+    # 考试安排：只读本地缓存，不触发联网（更新走 /exam/update）
+    exam_payload = load_exam(xh)
+    exams = normalize(exam_payload["items"]) if exam_payload else []
 
     return templates.TemplateResponse(
         request=request,
@@ -559,16 +704,28 @@ def schedule_page(request: Request):
         context={
             "active": "schedule",
             "update_action": "/schedule/update",
+            "exam_update_action": "/exam/update",
             "today_cn": _date_cn(today),
             "weekday_cn": WEEKDAY_CN[weekday - 1],
             "semester_week": week,
+            "sel_week": sel_week,
+            "max_week": max_w,
+            "weeks": list(range(1, max_w + 1)),
+            "weeks_data": weeks_data,
+            "semester_start": start,
             "in_semester": in_sem,
             "today_courses": (courses_on(kb, weekday, week) if in_sem else []),
-            "week_grid": (week_grid(kb, week) if in_sem else week_grid(kb)),
+            "week_grid": grid_sel,
+            "week_dates": week_dates,
             "weekdays": WEEKDAY_CN,
             "today_weekday": weekday,
+            "sel_is_current": (in_sem and sel_week == week),
             "schedule_synced": payload is not None,
             "fetched_at": (payload.get("fetched_at") if payload else None),
+            "exams": exams,
+            "exam_synced": exam_payload is not None,
+            "exam_fetched_at": (exam_payload.get("fetched_at") if exam_payload else None),
+            "term_label": _term_label(disp_xnm, disp_xqm),
         },
     )
 
@@ -601,6 +758,64 @@ def schedule_update(request: Request, xnm: str = Form(""), xqm: str = Form("")):
     get_schedule(session, xh, force=True, xnm=xnm, xqm=xqm)
 
     return _redirect_msg("/schedule", f"课表已更新（{_term_label(xnm, xqm)}）", True)
+
+
+@app.post("/schedule/start")
+def schedule_start(
+    request: Request,
+    semester_start: str = Form(""),
+    reset: str = Form(""),
+):
+    """设置课表开始时间（学期第一周周一）；reset=1 恢复 config 默认值"""
+
+    if reset == "1":
+        _set_semester_start(request, SEMESTER_START)
+        return _redirect_msg(
+            "/schedule", f"已恢复默认课表开始时间（{SEMESTER_START}）", True
+        )
+
+    value = (semester_start or "").strip()
+
+    if not value:
+        return _redirect_msg("/schedule", "请选择课表开始时间", False)
+
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return _redirect_msg("/schedule", "日期格式不正确，应为 YYYY-MM-DD", False)
+
+    _set_semester_start(request, value)
+
+    return _redirect_msg("/schedule", f"课表开始时间已设为 {value}", True)
+
+
+@app.post("/exam/update")
+def exam_update(request: Request):
+    """爬取本学期考试安排并落盘；学年/学期优先跟随课表缓存"""
+
+    xh = _current_xh(request)
+    session = _jwxt_session(request)
+
+    if session is None:
+        return _redirect_msg("/schedule", "教务系统登录失败，无法获取考试安排", False)
+
+    payload = load_schedule(xh)
+
+    if payload:
+        xnm, xqm = payload.get("xnm", XNM), payload.get("xqm", XQM)
+    else:
+        xnm, xqm = _term(request)
+
+    result = get_exam(session, xh, force=True, xnm=xnm, xqm=xqm)
+
+    if result is None:
+        return _redirect_msg(
+            "/schedule", "考试安排获取失败（教务系统可能尚未发布本学期考试安排）", False
+        )
+
+    count = len(result.get("items") or [])
+
+    return _redirect_msg("/schedule", f"考试安排已更新（{count} 条）", True)
 
 
 # ======================

@@ -13,7 +13,7 @@
                 {% if in_semester %} · 第 {{ semester_week }} 周{% else %} · 学期外{% endif %}
             </p>
         </div>
-    </div>    </div>
+    </div>
 
     <div class="update-bar reveal" style="--d:.05s">
         <form method="post" action="{{ update_action }}" class="update-form">
@@ -24,6 +24,16 @@
         </form>
         <span class="update-hint">学年 / 学期在<a href="/">首页</a>设置</span>
     </div>
+
+    {# ---------- 课表开始时间 ---------- #}
+    <form method="post" action="/schedule/start" class="start-form reveal" style="--d:.06s">
+        <label class="sf-label" for="semesterStart">课表开始时间</label>
+        <input type="date" id="semesterStart" name="semester_start" class="sf-input"
+               value="{{ semester_start }}" required>
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+        <button type="submit" name="reset" value="1" class="btn btn-ghost btn-sm">恢复默认</button>
+        <span class="sf-hint">即学期第一周的周一，决定「第几周」的计算基准</span>
+    </form>
 
     {% if request.query_params.get('msg') %}
     <div class="notice {% if request.query_params.get('ok') == '1' %}notice-teal{% else %}notice-amber{% endif %} reveal" role="status">{{ request.query_params.get('msg') }}</div>
@@ -80,20 +90,37 @@
         {% endif %}
     </section>
 
-    {# ---------- 本周课表 ---------- #}
+    {# ---------- 课表（可按周切换） ---------- #}
     <section class="section reveal" style="--d:.2s" aria-labelledby="sec-week">
-        <h2 class="section-title" id="sec-week">本周课表</h2>
-        <p class="section-sub">
-            {% if in_semester %}第 {{ semester_week }} 周 · 已按周次过滤{% else %}学期外 · 展示全部周次安排{% endif %}
-            {% if fetched_at %} · 数据同步于 {{ fetched_at }}{% endif %}
-        </p>
+        <div class="week-head">
+            <div>
+                <h2 class="section-title" id="sec-week">课表</h2>
+                <p class="section-sub">
+                    第 <b id="weekNum">{{ sel_week }}</b> 周
+                    <span id="weekNow" {% if not sel_is_current %}hidden{% endif %}>· 本周</span>
+                    {% if fetched_at %} · 数据同步于 {{ fetched_at }}{% endif %}
+                </p>
+            </div>
+            <div class="week-nav">
+                <button type="button" class="wn-btn" id="prevWeek" aria-label="上一周">‹</button>
+                <button type="button" class="wn-btn" id="nextWeek" aria-label="下一周">›</button>
+            </div>
+        </div>
 
-        <div class="week-grid">
+        <div class="week-tabs" id="weekTabs" role="tablist" aria-label="周次切换">
+            {% for wk in weeks %}
+            <button type="button" class="wtab{% if wk == sel_week %} is-active{% endif %}"
+                    role="tab" data-week="{{ wk }}"
+                    aria-selected="{{ 'true' if wk == sel_week else 'false' }}">第{{ wk }}周</button>
+            {% endfor %}
+        </div>
+
+        <div class="week-grid" id="weekGrid">
             {% for d in range(1, 8) %}
-            <div class="day-col {% if in_semester and d == today_weekday %}day-today{% endif %}">
+            <div class="day-col {% if sel_is_current and d == today_weekday %}day-today{% endif %}">
                 <div class="day-head">
                     {{ weekdays[d - 1] }}
-                    {% if in_semester and d == today_weekday %}
+                    {% if sel_is_current and d == today_weekday %}
                     <span class="badge badge-teal">今天</span>
                     {% endif %}
                 </div>
@@ -116,8 +143,77 @@
     </section>
     {% endif %}
 
+    {# ---------- 期末考试安排 ---------- #}
+    <section class="section reveal" style="--d:.25s" aria-labelledby="sec-exam">
+        <div class="exam-head-row">
+            <div>
+                <h2 class="section-title" id="sec-exam">期末考试安排</h2>
+                <p class="section-sub">
+                    {% if exams and exams[0].exam_name %}{{ exams[0].exam_name }}{% else %}{{ term_label }}{% endif %}
+                    {% if exam_fetched_at %} · 数据同步于 {{ exam_fetched_at }}{% endif %}
+                </p>
+            </div>
+            <form method="post" action="{{ exam_update_action }}" class="exam-update-form">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                    更新考试安排
+                </button>
+            </form>
+        </div>
+
+        {% if not exam_synced %}
+        <div class="notice notice-amber" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            考试安排尚未同步。点右上角「更新考试安排」从教务系统获取（只需同步一次，之后读取本地缓存）。
+        </div>
+
+        {% elif not exams %}
+        <div class="notice notice-teal" role="status">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            本学期暂无考试安排（教务处可能尚未发布）。
+        </div>
+
+        {% else %}
+        <div class="exam-list">
+            {% for e in exams %}
+            <article class="exam-card card card-hover" data-exam-idx="{{ loop.index0 }}"
+                     role="button" tabindex="0" aria-expanded="false"
+                     aria-controls="examDetail-{{ loop.index0 }}" title="点击展开考试详情">
+                <div class="exam-main">
+                    <div class="exam-course">{{ e.course }}</div>
+                    <div class="exam-meta-row">
+                        <span class="chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            {{ e.time_text }}
+                        </span>
+                        <span class="chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            {{ e.place }}
+                        </span>
+                    </div>
+                </div>
+                <span class="exam-toggle" aria-hidden="true">›</span>
+            </article>
+
+            <div class="exam-detail" id="examDetail-{{ loop.index0 }}" hidden>
+                <div class="ed-grid">
+                    <div class="ed-item"><span class="ed-label">学分</span><span class="ed-value">{{ e.credit }}</span></div>
+                    <div class="ed-item"><span class="ed-label">考场</span><span class="ed-value">{{ e.place }}</span></div>
+                    <div class="ed-item"><span class="ed-label">座位号</span><span class="ed-value">{{ e.seat }}</span></div>
+                    <div class="ed-item"><span class="ed-label">考核方式</span><span class="ed-value">{{ e.method }}</span></div>
+                    <div class="ed-item"><span class="ed-label">开课学院</span><span class="ed-value">{{ e.college }}</span></div>
+                    <div class="ed-item"><span class="ed-label">监考教师</span><span class="ed-value">{{ e.teachers }}</span></div>
+                    <div class="ed-item"><span class="ed-label">校区</span><span class="ed-value">{{ e.campus }}</span></div>
+                    <div class="ed-item"><span class="ed-label">学年学期</span><span class="ed-value">{{ e.xn }} {{ e.xq }}</span></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+
     <footer class="footer">
-        西科大教务助手 · 课表为本地静态缓存，点「更新数据」可重新获取
+        西科大教务助手 · 课表与考试安排均为本地静态缓存，点对应「更新」按钮可重新获取
     </footer>
 
 </main>
@@ -135,13 +231,43 @@
     </div>
 </div>
 
-{# 课程数据：JSON 序列化后由前端解析，避免逐个字段拼属性 #}
-<script id="week-grid-data" type="application/json">{{ week_grid | tojson }}</script>
+{# 全部周次的课表数据：供前端切换周次与打开课程详情 #}
+<script id="weeks-data" type="application/json">{{ weeks_data | tojson }}</script>
 <script id="today-data" type="application/json">{{ today_courses | tojson }}</script>
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
+{# ---------- 考试记录展开/收起（不依赖课表是否已同步） ---------- #}
+<script>
+(function () {
+    "use strict";
+
+    document.querySelectorAll(".exam-card[data-exam-idx]").forEach(function (card) {
+        var detail = document.getElementById("examDetail-" + card.dataset.examIdx);
+        if (!detail) return;
+
+        var toggle = function () {
+            var willOpen = detail.hasAttribute("hidden");
+            if (willOpen) {
+                detail.removeAttribute("hidden");
+                card.setAttribute("aria-expanded", "true");
+                card.classList.add("is-open");
+            } else {
+                detail.setAttribute("hidden", "");
+                card.setAttribute("aria-expanded", "false");
+                card.classList.remove("is-open");
+            }
+        };
+
+        card.addEventListener("click", toggle);
+        card.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(); }
+        });
+    });
+})();
+</script>
+
 {% if schedule_synced %}
 <script>
 (function () {
@@ -160,13 +286,25 @@
             .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
 
-    var weekData, todayData;
+    var weeksData = {}, todayData = [];
     try {
-        weekData = JSON.parse(document.getElementById("week-grid-data").textContent);
+        weeksData = JSON.parse(document.getElementById("weeks-data").textContent);
         todayData = JSON.parse(document.getElementById("today-data").textContent);
     } catch (e) {
         return;
     }
+
+    var maxWeek = {{ max_week }};
+    var cur = {{ sel_week }};
+    var todayWeekday = {{ today_weekday }};
+    var currentWeek = {{ semester_week }};
+    var inSemester = {{ 'true' if in_semester else 'false' }};
+    var weekdays = {{ weekdays | tojson }};
+
+    var tabs = document.getElementById("weekTabs");
+    var grid = document.getElementById("weekGrid");
+    var weekNum = document.getElementById("weekNum");
+    var weekNow = document.getElementById("weekNow");
 
     var overlay = document.getElementById("courseModal");
     var mTitle = document.getElementById("cmTitle");
@@ -186,7 +324,6 @@
 
         mTitle.textContent = val(c.kcmc);
 
-        // 标签：课程性质 / 考核方式 / 总学时
         var tags = [];
         if (!isNA(c.kcxz)) tags.push(val(c.kcxz));
         if (!isNA(c.khfsmc) && val(c.khfsmc) !== "未安排") tags.push(val(c.khfsmc));
@@ -195,14 +332,12 @@
             return '<span class="badge badge-soft">' + esc(t) + "</span>";
         }).join("");
 
-        // 上课时间：星期 + 节次
         var timeStr = NA;
         var wd = val(c.xqjmc), jcTxt = val(c.jc);
         if (wd !== NA || jcTxt !== NA) {
             timeStr = ((wd !== NA ? wd : "") + " " + (jcTxt !== NA ? jcTxt : "")).trim();
         }
 
-        // 上课班级：按分号拆分为 chip
         var classRow;
         if (isNA(c.jxbzc)) {
             classRow = row("上课班级", c.jxbzc);
@@ -216,7 +351,6 @@
                 }).join("") + "</span></div>";
         }
 
-        // 上课地点：教室 + 校区
         var place = val(c.cdmc);
         if (place !== NA && !isNA(c.xqmc)) place += "（" + val(c.xqmc) + "）";
 
@@ -238,17 +372,111 @@
         document.body.style.overflow = "";
     }
 
-    // 本周课表课程块
-    document.querySelectorAll(".mini-course[data-day]").forEach(function (el) {
-        var open = function () {
-            var list = weekData[el.dataset.day];
-            if (list) openCard(list[+el.dataset.idx]);
-        };
-        el.addEventListener("click", open);
-        el.addEventListener("keydown", function (ev) {
-            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); }
+    // 当前周次下的课程：优先取切换后的数据
+    function courseAt(day, idx) {
+        var week = weeksData[String(cur)];
+        if (!week) return null;
+        var list = week[String(day)];
+        return list ? list[idx] : null;
+    }
+
+    function bindGridCourses() {
+        grid.querySelectorAll(".mini-course[data-day]").forEach(function (el) {
+            var open = function () { openCard(courseAt(el.dataset.day, +el.dataset.idx)); };
+            el.addEventListener("click", open);
+            el.addEventListener("keydown", function (ev) {
+                if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); }
+            });
         });
-    });
+    }
+
+    function buildGrid(w) {
+        var week = weeksData[String(w)] || {};
+        var html = "";
+
+        for (var d = 1; d <= 7; d++) {
+            var isToday = (inSemester && w === currentWeek && d === todayWeekday);
+
+            html += '<div class="day-col' + (isToday ? " day-today" : "") + '">';
+            html += '<div class="day-head">' + esc(weekdays[d - 1]) +
+                (isToday ? '<span class="badge badge-teal">今天</span>' : "") + "</div>";
+
+            var list = week[String(d)] || [];
+
+            if (list.length) {
+                for (var i = 0; i < list.length; i++) {
+                    var c = list[i];
+                    html += '<div class="mini-course" data-day="' + d + '" data-idx="' + i + '"' +
+                        ' role="button" tabindex="0" title="点击查看课程详情">' +
+                        '<div class="mc-name">' + esc(c.kcmc) + "</div>" +
+                        '<div class="mc-meta">' + esc(c.jc) + " · " + esc(c.cdmc || "地点待定") + "</div>" +
+                        '<div class="mc-meta">' + esc(c.xm || "—") + " · " + esc(c.zcd) + "</div>" +
+                        "</div>";
+                }
+            } else {
+                html += '<div class="day-empty">无课</div>';
+            }
+
+            html += "</div>";
+        }
+
+        return html;
+    }
+
+    function scrollTabIntoView(w) {
+        if (!tabs) return;
+        var el = tabs.querySelector('.wtab[data-week="' + w + '"]');
+        if (el && el.scrollIntoView) {
+            el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+        }
+    }
+
+    function setWeek(w) {
+        if (w < 1 || w > maxWeek || w === cur) return;
+
+        cur = w;
+
+        if (tabs) {
+            tabs.querySelectorAll(".wtab").forEach(function (b) {
+                var on = (+b.dataset.week === cur);
+                b.classList.toggle("is-active", on);
+                b.setAttribute("aria-selected", on ? "true" : "false");
+            });
+        }
+
+        if (weekNum) weekNum.textContent = cur;
+        if (weekNow) weekNow.hidden = !(inSemester && cur === currentWeek);
+
+        grid.innerHTML = buildGrid(cur);
+        bindGridCourses();
+        scrollTabIntoView(cur);
+
+        try { history.replaceState(null, "", "?w=" + cur); } catch (e) {}
+    }
+
+    // 周次标签点击
+    if (tabs) {
+        tabs.querySelectorAll(".wtab[data-week]").forEach(function (b) {
+            b.addEventListener("click", function () { setWeek(+b.dataset.week); });
+        });
+
+        // 竖向滚轮转为横向滚动，方便鼠标快速翻周
+        tabs.addEventListener("wheel", function (ev) {
+            if (Math.abs(ev.deltaY) > Math.abs(ev.deltaX)) {
+                ev.preventDefault();
+                tabs.scrollLeft += ev.deltaY;
+            }
+        }, { passive: false });
+    }
+
+    var prevBtn = document.getElementById("prevWeek");
+    var nextBtn = document.getElementById("nextWeek");
+    if (prevBtn) prevBtn.addEventListener("click", function () { setWeek(cur - 1); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { setWeek(cur + 1); });
+
+    // 初始：定位到当前周标签 + 绑定课程点击
+    bindGridCourses();
+    scrollTabIntoView(cur);
 
     // 今日课程卡片
     document.querySelectorAll(".slot-clickable[data-today-idx]").forEach(function (el) {

@@ -1,5 +1,52 @@
 {% extends "base.html" %}
 
+{% block head %}
+<style>
+    .account-switcher { margin-top: 22px; }
+    .as-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .as-title { font-size: 14.5px; color: var(--muted); }
+    .as-title strong { color: var(--primary-ink); }
+    .as-xh { margin-left: 6px; font-size: 12.5px; color: var(--muted); }
+    .as-manage { font-size: 13.5px; color: var(--primary); text-decoration: none; white-space: nowrap; }
+    .as-manage:hover { text-decoration: underline; }
+    .as-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip-form { margin: 0; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--primary-ink); font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--t-fast) var(--ease-out); }
+    .chip:hover { border-color: var(--primary); background: var(--primary-soft); }
+    .chip:active { transform: translateY(0) scale(.97); }
+    .chip-xh { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .chip-active { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; font-size: 14px; font-weight: 700; }
+    .chip-active .chip-xh { color: rgba(255,255,255,.8); }
+    .as-empty { color: var(--muted); font-size: 14px; }
+    .as-empty a { color: var(--primary); }
+    .term-setter { margin-top: 14px; }
+    .term-form { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .term-year { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+    .term-year select {
+        appearance: none;
+        padding: 8px 30px 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+        color: var(--primary-ink);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-color var(--t-fast) var(--ease-out);
+    }
+    .term-year select:hover { border-color: var(--primary); }
+    .term-chips { gap: 10px; }
+    .term-chips .chip-radio { position: relative; margin: 0; cursor: pointer; }
+    .term-chips .chip-radio input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .term-chips .chip-radio .chip { cursor: pointer; }
+    .term-chips .chip-radio input:checked + .chip {
+        background: linear-gradient(135deg, var(--primary), var(--primary-2));
+        color: #fff;
+        border-color: transparent;
+    }
+</style>
+{% endblock %}
+
 {% block title %}{{ title }} · 首页{% endblock %}
 
 {% block content %}
@@ -59,10 +106,64 @@
                 {% else %}
                     <div class="preview-empty">
                         <p>课表数据尚未同步</p>
-                        <a href="/schedule/refresh" class="btn btn-primary btn-block">立即同步课表</a>
+                        <a href="/schedule" class="btn btn-primary btn-block">去「每日课表」更新</a>
                     </div>
                 {% endif %}
             </div>
+        </div>
+    </section>
+
+    {# ================= 切换教务账号（首页，仅可切换，不可删除） ================= #}
+    <section class="reveal" style="--d:.33s" aria-label="切换教务账号">
+        <div class="card card-pad account-switcher">
+            <div class="as-head">
+                <div class="as-title">
+                    当前教务账号：<strong>{{ current_name or "未选择" }}</strong>
+                    {% if current_xh %}<span class="as-xh">{{ current_xh }}</span>{% endif %}
+                </div>
+                <a href="/users" class="as-manage">管理账号 →</a>
+            </div>
+            {% if users %}
+            <div class="as-chips">
+                {% for u in users %}
+                {% if u.xh|string == current_xh|string %}
+                <span class="chip chip-active">{{ u.name }}<span class="chip-xh">{{ u.xh }}</span></span>
+                {% else %}
+                <form method="post" action="/users/switch" class="chip-form">
+                    <input type="hidden" name="xh" value="{{ u.xh }}">
+                    <input type="hidden" name="next" value="/">
+                    <button type="submit" class="chip">{{ u.name }}<span class="chip-xh">{{ u.xh }}</span></button>
+                </form>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="as-empty">暂无教务账号，<a href="/users">去添加 →</a></p>
+            {% endif %}
+        </div>
+    </section>
+
+    {# ================= 学期设置（首页统一设置学年/学期） ================= #}
+    <section class="reveal" style="--d:.34s" aria-label="学期设置">
+        <div class="card card-pad term-setter">
+            <div class="as-head">
+                <div class="as-title">
+                    数据学期：<strong>{{ term_label }}</strong>
+                    <span class="as-xh">课表 / 成绩 / 进度共用</span>
+                </div>
+            </div>
+            <form method="post" action="/term/set" class="term-form">
+                <label class="term-year"><span>学年</span>
+                    <select name="xnm">
+                        {% for o in term_options %}<option value="{{ o.xnm }}" {% if o.xnm|string == sel_xnm|string %}selected{% endif %}>{{ o.label }}</option>{% endfor %}
+                    </select>
+                </label>
+                <div class="as-chips term-chips">
+                    <label class="chip-radio"><input type="radio" name="xqm" value="3" {% if sel_xqm|string == '3' %}checked{% endif %}><span class="chip">第一学期</span></label>
+                    <label class="chip-radio"><input type="radio" name="xqm" value="12" {% if sel_xqm|string == '12' %}checked{% endif %}><span class="chip">第二学期</span></label>
+                </div>
+                <button type="submit" class="btn btn-primary">保存设置</button>
+            </form>
         </div>
     </section>
 

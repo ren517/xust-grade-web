@@ -9,7 +9,7 @@ BASE_URL = "http://59.74.174.150/jwglxt/"
 
 
 
-def select_score(session, name, export=False):
+def select_score(session, name, xnm=XNM, xqm=XQM, export=False):
 
 
     headers = {
@@ -35,9 +35,9 @@ def select_score(session, name, export=False):
 
     data = {
 
-        "xnm": XNM,
+        "xnm": xnm,
 
-        "xqm": XQM,
+        "xqm": xqm,
 
         "_search": "false",
 
@@ -90,7 +90,9 @@ def select_score(session, name, export=False):
 
             detail = select_score_detail(
                 session,
-                course
+                course,
+                xnm=xnm,
+                xqm=xqm
             )
 
 
@@ -174,7 +176,7 @@ def select_score(session, name, export=False):
 
 
 
-def select_score_detail(session, course):
+def select_score_detail(session, course, xnm=XNM, xqm=XQM):
 
 
     url = (
@@ -200,13 +202,13 @@ def select_score_detail(session, course):
 
         "xnm":
 
-        XNM,
+        xnm,
 
 
 
         "xqm":
 
-        XQM,
+        xqm,
 
 
 

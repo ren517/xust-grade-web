@@ -48,7 +48,7 @@ def _path(xh):
     return f"{DATA_DIR}/schedule_{xh}.json"
 
 
-def fetch_schedule(session):
+def fetch_schedule(session, xnm=XNM, xqm=XQM):
     """
     请求教务系统个人课表接口，返回 kbList 列表；失败返回 None。
     接口：POST kbcx/xskbcx_cxXsgrkb.html?gnmkdm=N253508
@@ -56,8 +56,8 @@ def fetch_schedule(session):
     url = BASE_URL + "kbcx/xskbcx_cxXsgrkb.html"
 
     data = {
-        "xnm": XNM,
-        "xqm": XQM,
+        "xnm": xnm,
+        "xqm": xqm,
         "kzlx": "ck",
         "xsdm": "",
         "kclbdm": "",
@@ -91,12 +91,12 @@ def fetch_schedule(session):
     return kb_list
 
 
-def save_schedule(xh, kb_list):
+def save_schedule(xh, kb_list, xnm=XNM, xqm=XQM):
     """课表落盘为静态资源文件"""
     payload = {
         "xh": xh,
-        "xnm": XNM,
-        "xqm": XQM,
+        "xnm": xnm,
+        "xqm": xqm,
         "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kbList": kb_list
     }
@@ -126,7 +126,7 @@ def load_schedule(xh):
     return payload
 
 
-def get_schedule(session, xh, force=False):
+def get_schedule(session, xh, force=False, xnm=XNM, xqm=XQM):
     """
     获取课表：优先静态缓存；缓存缺失或 force=True 时爬取一次并保存。
     爬取失败时回退到旧缓存（若有），实在没有返回 None。
@@ -136,12 +136,12 @@ def get_schedule(session, xh, force=False):
         if cached:
             return cached
 
-    kb_list = fetch_schedule(session)
+    kb_list = fetch_schedule(session, xnm=xnm, xqm=xqm)
 
     if kb_list is None:
         return load_schedule(xh)
 
-    return save_schedule(xh, kb_list)
+    return save_schedule(xh, kb_list, xnm=xnm, xqm=xqm)
 
 
 # ======================

@@ -12,7 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from config import ADMIN_PASSWORD, ADMIN_USER, NAME, SECRET_KEY, WEB_USERS_FILE, XH
+from config import ADMIN_PASSWORD, ADMIN_USER, NAME, SECRET_KEY, WEB_USERS_FILE, XH, XNM, XQM
 
 # ======================
 # 部署开关
@@ -27,7 +27,7 @@ HTTPS_ONLY = os.environ.get("HTTPS_ONLY", "0") == "1"
 # 引入核心代码
 # ======================
 sys.path.append("./core")
-from core.cookie_manager import clear_cookie, find_user, load_users
+from core.cookie_manager import clear_cookie, delete_user, find_user, load_users
 from core.history import compare_courses, load_history, save_history
 from core.main import DEFAULT_ENTRY, create_user, login_user
 from core.schedule import (
@@ -42,6 +42,7 @@ from core.schedule import (
     week_grid,
 )
 from core.score import select_score
+from core.score_cache import load_score as load_score_cache, save_score as save_score_cache
 
 # ======================
 # 创建APP
@@ -134,6 +135,44 @@ app.mount("/static", CachedStaticFiles(directory="static"), name="static")
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 templates = Jinja2Templates(directory="templates")
+
+
+# ======================
+# 学年 / 学期（查询维度，可选，存于 session）
+# 教务系统学期代号坑：第一学期 = 3，第二学期 = 12
+# ======================
+
+SEMESTER_OPTIONS = [
+    {"xqm": "3", "label": "第一学期"},
+    {"xqm": "12", "label": "第二学期"},
+]
+
+
+def _term_options():
+    """生成可选学年列表（当前学年前后若干年）"""
+    y = date.today().year
+    return [
+        {"xnm": str(s), "label": f"{s}-{s + 1}学年"}
+        for s in range(y + 1, y - 6, -1)
+    ]
+
+
+def _term(request):
+    """读取 session 中选中的学年/学期，缺省回退 config"""
+    return (
+        request.session.get("term_xnm") or XNM,
+        request.session.get("term_xqm") or XQM,
+    )
+
+
+def _term_label(xnm, xqm):
+    xqm_label = "第一学期" if xqm == "3" else "第二学期"
+    return f"{xnm}-{int(xnm) + 1}学年 {xqm_label}"
+
+
+def _set_term(request, xnm, xqm):
+    request.session["term_xnm"] = xnm
+    request.session["term_xqm"] = xqm
 
 
 # ======================
@@ -325,8 +364,10 @@ def users_page(request: Request):
 
 
 @app.post("/users/switch")
-def users_switch(request: Request, xh: str = Form("")):
-    """切换当前教务账号：先注销旧账号（清会话与缓存），再绑定新账号"""
+def users_switch(request: Request, xh: str = Form(""), next: str = Form("")):
+    """切换当前教务账号：先注销旧账号（清会话与缓存），再绑定新账号
+    next 指定切换后跳回的页面（默认 /users，首页切换传 / ）
+    """
 
     xh = (xh or "").strip()
 
@@ -344,7 +385,12 @@ def users_switch(request: Request, xh: str = Form("")):
     request.session["xh"] = str(user.get("xh"))
     request.session["name"] = user.get("name", "")
 
-    return _redirect_msg("/users", f"已切换到 {user.get('name')}（{xh}）", True)
+    # 切换后跳回来源页；仅允许站内相对路径，防开放重定向
+    target = next or "/users"
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/users"
+
+    return _redirect_msg(target, f"已切换到 {user.get('name')}（{xh}）", True)
 
 
 @app.post("/users/add")
@@ -364,6 +410,29 @@ def users_add(
     ok, msg = create_user(name, xh, password, verify=(verify == "1"))
 
     return _redirect_msg("/users", msg, ok)
+
+
+@app.post("/users/delete")
+def users_delete(request: Request, xh: str = Form("")):
+    """删除教务账号：同时清理其 Cookie 缓存；删除当前账号会先重置教务会话"""
+
+    xh = (xh or "").strip()
+
+    if not xh:
+        return _redirect_msg("/users", "学号不能为空", False)
+
+    user = find_user(xh)
+
+    if user is None:
+        return _redirect_msg("/users", f"学号 {xh} 不存在", False)
+
+    # 删除的正是当前账号时，先清掉会话里的教务状态，避免指向已删除账号
+    if str(_current_xh(request)) == str(xh):
+        _reset_jwxt_state(request)
+
+    delete_user(xh)
+
+    return _redirect_msg("/users", f"已删除账号 {user.get('name')}（{xh}）", True)
 
 
 # ======================
@@ -427,11 +496,8 @@ def index(request: Request):
 
     xh = _current_xh(request)
 
-    # 读静态课表；仅当从未同步过时触发一次性爬取
+    # 只读本地缓存课表，不触发查询（未同步时由用户到「每日课表」点「更新数据」）
     payload = load_schedule(xh)
-
-    if payload is None:
-        payload = _sync_schedule(request)
 
     kb = payload["kbList"] if payload else []
 
@@ -443,6 +509,14 @@ def index(request: Request):
         context={
             "title": "西科大教务助手",
             "active": "home",
+            "term_options": _term_options(),
+            "semester_options": SEMESTER_OPTIONS,
+            "sel_xnm": _term(request)[0],
+            "sel_xqm": _term(request)[1],
+            "term_label": _term_label(*_term(request)),
+            "users": load_users(),
+            "current_xh": _current_xh(request),
+            "current_name": _current_account(request).get("name"),
             "today_cn": _date_cn(today),
             "weekday_cn": WEEKDAY_CN[weekday - 1],
             "semester_week": week,
@@ -470,17 +544,21 @@ def schedule_page(request: Request):
 
     payload = load_schedule(xh)
 
-    if payload is None:
-        payload = _sync_schedule(request)
-
     kb = payload["kbList"] if payload else []
     in_sem = in_semester(week)
+
+    # 已同步：按缓存实际学年/学期展示；否则用 session/默认
+    if payload:
+        disp_xnm, disp_xqm = payload.get("xnm", XNM), payload.get("xqm", XQM)
+    else:
+        disp_xnm, disp_xqm = _term(request)
 
     return templates.TemplateResponse(
         request=request,
         name="schedule.html",
         context={
             "active": "schedule",
+            "update_action": "/schedule/update",
             "today_cn": _date_cn(today),
             "weekday_cn": WEEKDAY_CN[weekday - 1],
             "semester_week": week,
@@ -495,12 +573,34 @@ def schedule_page(request: Request):
     )
 
 
-@app.get("/schedule/refresh")
-def schedule_refresh(request: Request):
-    """强制重新爬取课表（新学期或课表变更时手动触发）"""
-    _sync_schedule(request, force=True)
+@app.post("/term/set")
+def term_set(request: Request, xnm: str = Form(""), xqm: str = Form("")):
+    """首页统一设置学年/学期（存 session），各页「更新数据」按此执行"""
+    xnm = (xnm or "").strip() or XNM
+    xqm = (xqm or "").strip() or XQM
+    if xqm not in ("3", "12"):
+        xqm = XQM
+    _set_term(request, xnm, xqm)
+    return _redirect_msg("/", f"已切换到 {_term_label(xnm, xqm)}", True)
 
-    return RedirectResponse("/schedule", status_code=302)
+
+@app.post("/schedule/update")
+def schedule_update(request: Request, xnm: str = Form(""), xqm: str = Form("")):
+    """按所选学年/学期重新爬取课表并落盘；重定向回页面读缓存"""
+    sess_xnm, sess_xqm = _term(request)
+    xnm = (xnm or "").strip() or sess_xnm
+    xqm = (xqm or "").strip() or sess_xqm
+    _set_term(request, xnm, xqm)
+
+    xh = _current_xh(request)
+    session = _jwxt_session(request)
+
+    if session is None:
+        return _redirect_msg("/schedule", "教务系统登录失败，无法更新课表", False)
+
+    get_schedule(session, xh, force=True, xnm=xnm, xqm=xqm)
+
+    return _redirect_msg("/schedule", f"课表已更新（{_term_label(xnm, xqm)}）", True)
 
 
 # ======================
@@ -512,31 +612,24 @@ def schedule_refresh(request: Request):
 def progress(request: Request):
     xh = _current_xh(request)
 
-    # 课表：静态资源
+    # 课表：本地静态缓存
     payload = load_schedule(xh)
-
-    if payload is None:
-        payload = _sync_schedule(request)
-
     kb = payload["kbList"] if payload else []
     all_courses = unique_courses(kb)
 
-    # 成绩：每次刷新实时爬取
-    score_error = False
-    score_items = []
-
-    try:
-        session = _jwxt_session(request)
-        result = select_score(session, _current_account(request).get("name")) if session else None
-
-        if result is None:
-            score_error = True
-        else:
-            score_items = result.get("items", [])
-    except Exception:
-        score_error = True
+    # 成绩：本地缓存（首次需点「更新数据」）
+    score_payload = load_score_cache(xh)
+    score_items = score_payload.get("items", []) if score_payload else []
+    score_error = score_payload is None
 
     scored = {normalize_name(c.get("kcmc")): c for c in score_items}
+
+    if payload:
+        disp_xnm, disp_xqm = payload.get("xnm", XNM), payload.get("xqm", XQM)
+    elif score_payload:
+        disp_xnm, disp_xqm = score_payload.get("xnm", XNM), score_payload.get("xqm", XQM)
+    else:
+        disp_xnm, disp_xqm = _term(request)
 
     done = []
     pending = []
@@ -559,6 +652,7 @@ def progress(request: Request):
         name="progress.html",
         context={
             "active": "progress",
+            "update_action": "/progress/update",
             "total": total,
             "done": done,
             "pending": pending,
@@ -576,45 +670,46 @@ def progress(request: Request):
 # ======================
 
 
-@app.get("/score")
-def score(request: Request):
+@app.post("/progress/update")
+def progress_update(request: Request, xnm: str = Form(""), xqm: str = Form("")):
+    """按所选学年/学期同时更新课表与成绩"""
+    sess_xnm, sess_xqm = _term(request)
+    xnm = (xnm or "").strip() or sess_xnm
+    xqm = (xqm or "").strip() or sess_xqm
+    _set_term(request, xnm, xqm)
+
+    xh = _current_xh(request)
     account = _current_account(request)
-
-    xh = account.get("xh") or XH
     name = account.get("name") or NAME
-
     session = _jwxt_session(request)
 
     if session is None:
-        return HTMLResponse("教务系统登录失败，请稍后再试（请先在「用户管理」添加并切换教务账号）")
+        return _redirect_msg("/progress", "教务系统登录失败，无法更新", False)
 
-    result = select_score(session, name)
+    # 课表
+    get_schedule(session, xh, force=True, xnm=xnm, xqm=xqm)
 
-    if result is None:
-        return HTMLResponse("成绩查询失败")
+    # 成绩
+    result = select_score(session, name, xnm=xnm, xqm=xqm)
+    if result:
+        courses = result.get("items", [])
+        save_score_cache(xh, xnm, xqm, courses)
 
-    courses = result["items"]
+    return _redirect_msg("/progress", f"已更新课表与成绩（{_term_label(xnm, xqm)}）", True)
 
-    # ======================
-    # 查询历史
-    # ======================
 
-    new_courses = []
+@app.get("/score")
+def score(request: Request):
+    """进入即渲染本地缓存成绩，不触发查询；查询由「更新数据」触发"""
+    account = _current_account(request)
+    xh = account.get("xh") or XH
 
-    history = load_history(xh)
+    payload = load_score_cache(xh)
+    courses = payload.get("items", []) if payload else []
 
-    if history:
-        new_courses = compare_courses(history["courses"], courses)
-
-    # ======================
-    # 保存网页查询历史
-    # ======================
-
-    save_history(xh, name, courses)
-
-    # ======================
-    # 统计概览（供前端卡片展示）
-    # ======================
+    # 一次性 flash：上次「更新」发现的新增成绩
+    flash_new = request.session.pop("score_flash_new", None)
+    new_courses = payload.get("_new", []) if flash_new else []
 
     def _num(v):
         """安全转 float，非法值返回 None"""
@@ -643,6 +738,11 @@ def score(request: Request):
         "new_count": len(new_courses),
     }
 
+    if payload:
+        disp_xnm, disp_xqm = payload.get("xnm", XNM), payload.get("xqm", XQM)
+    else:
+        disp_xnm, disp_xqm = _term(request)
+
     return templates.TemplateResponse(
         request=request,
         name="score.html",
@@ -651,5 +751,45 @@ def score(request: Request):
             "new_courses": new_courses,
             "stats": stats,
             "active": "score",
+            "score_cached": payload is not None,
+            "fetched_at": (payload.get("fetched_at") if payload else None),
+            "update_action": "/score/update",
         },
     )
+
+
+@app.post("/score/update")
+def score_update(request: Request, xnm: str = Form(""), xqm: str = Form("")):
+    """按所选学年/学期重新查询成绩并落盘"""
+    sess_xnm, sess_xqm = _term(request)
+    xnm = (xnm or "").strip() or sess_xnm
+    xqm = (xqm or "").strip() or sess_xqm
+    _set_term(request, xnm, xqm)
+
+    account = _current_account(request)
+    xh = account.get("xh") or XH
+    name = account.get("name") or NAME
+
+    session = _jwxt_session(request)
+    if session is None:
+        return _redirect_msg("/score", "教务系统登录失败，无法更新成绩", False)
+
+    result = select_score(session, name, xnm=xnm, xqm=xqm)
+    if result is None:
+        return _redirect_msg("/score", "成绩查询失败，请稍后重试", False)
+
+    courses = result["items"]
+
+    # 新增成绩：与历史对比
+    new_courses = []
+    history = load_history(xh)
+    if history:
+        new_courses = compare_courses(history["courses"], courses)
+
+    save_history(xh, name, courses)
+    save_score_cache(xh, xnm, xqm, courses, _new=new_courses)
+
+    # 一次性 flash 给 GET 展示新增
+    request.session["score_flash_new"] = True
+
+    return _redirect_msg("/score", f"成绩已更新（{_term_label(xnm, xqm)}）", True)

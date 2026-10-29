@@ -13,23 +13,28 @@
                 {% if in_semester %} · 第 {{ semester_week }} 周{% else %} · 学期外{% endif %}
             </p>
         </div>
-        <a href="/schedule/refresh" class="btn btn-ghost" title="重新从教务系统爬取课表">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-            重新同步课表
-        </a>
+    </div>    </div>
+
+    <div class="update-bar reveal" style="--d:.05s">
+        <form method="post" action="{{ update_action }}" class="update-form">
+            <button type="submit" class="btn btn-primary">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                更新数据
+            </button>
+        </form>
+        <span class="update-hint">学年 / 学期在<a href="/">首页</a>设置</span>
     </div>
+
+    {% if request.query_params.get('msg') %}
+    <div class="notice {% if request.query_params.get('ok') == '1' %}notice-teal{% else %}notice-amber{% endif %} reveal" role="status">{{ request.query_params.get('msg') }}</div>
+    {% endif %}
+
 
     {% if not schedule_synced %}
     {# ---------- 课表未同步 ---------- #}
     <div class="notice notice-amber reveal" style="--d:.1s" role="status">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        课表数据尚未同步。点击下方按钮从教务系统获取（只需同步一次，之后读取本地缓存）。
-    </div>
-    <div class="reveal" style="--d:.15s; margin-top:16px;">
-        <a href="/schedule/refresh" class="btn btn-primary">
-            立即同步课表
-            <span class="arrow" aria-hidden="true">→</span>
-        </a>
+        课表数据尚未同步。请先在首页设置好学年/学期，再回到这里点「更新数据」（只需同步一次，之后读取本地缓存）。
     </div>
 
     {% else %}
@@ -112,7 +117,7 @@
     {% endif %}
 
     <footer class="footer">
-        西科大教务助手 · 课表为本地静态缓存，变更时请手动同步
+        西科大教务助手 · 课表为本地静态缓存，点「更新数据」可重新获取
     </footer>
 
 </main>

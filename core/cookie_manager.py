@@ -62,6 +62,35 @@ def find_user(xh):
 
 
 # =====================
+def delete_user(xh):
+    """按学号删除教务账号：删除 users/{xh}.json 并清理对应的 Cookie 缓存"""
+
+    xh = str(xh).strip()
+
+    path = os.path.join(USER_DIR, f"{xh}.json")
+
+    if os.path.exists(path):
+
+        os.remove(path)
+
+    # 清理该账号的 Cookie 缓存（文件名包含学号的所有缓存）
+    if os.path.exists(COOKIE_DIR):
+
+        for f in os.listdir(COOKIE_DIR):
+
+            if xh in f:
+
+                try:
+
+                    os.remove(os.path.join(COOKIE_DIR, f))
+
+                except OSError:
+
+                    pass
+
+    return True
+
+
 # Cookie管理
 # =====================
 

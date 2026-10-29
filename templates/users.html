@@ -103,6 +103,10 @@
                                 <button type="submit" class="btn btn-ghost">切换</button>
                             </form>
                             {% endif %}
+                            <form method="post" action="/users/delete" onsubmit="return confirm('确定删除 {{ u.name }}（{{ u.xh }}）？该账号的课表缓存也会一并清除，且不可撤销');">
+                                <input type="hidden" name="xh" value="{{ u.xh }}">
+                                <button type="submit" class="btn btn-danger">删除</button>
+                            </form>
                         </div>
                     </li>
                     {% endfor %}

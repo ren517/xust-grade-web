@@ -48,6 +48,7 @@ from core.schedule import (
     get_schedule,
     in_semester,
     load_schedule,
+    max_period,
     max_week,
     normalize_name,
     unique_courses,
@@ -147,6 +148,15 @@ app.mount("/static", CachedStaticFiles(directory="static"), name="static")
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 templates = Jinja2Templates(directory="templates")
+
+# 静态资源版本号：取 style.css 的 mtime，改样式后浏览器立刻拉新文件，不会被旧缓存坑
+try:
+    _STYLE_MTIME = os.path.getmtime(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "css", "style.css")
+    )
+except OSError:
+    _STYLE_MTIME = 0
+templates.env.globals["static_v"] = str(int(_STYLE_MTIME)) or "1"
 
 
 # ======================
@@ -710,6 +720,7 @@ def schedule_page(request: Request, w: str = ""):
             "semester_week": week,
             "sel_week": sel_week,
             "max_week": max_w,
+            "max_period": max_period(kb),
             "weeks": list(range(1, max_w + 1)),
             "weeks_data": weeks_data,
             "semester_start": start,

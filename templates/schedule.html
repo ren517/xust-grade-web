@@ -115,31 +115,45 @@
             <button type="button" class="wn-btn" id="nextWeek" aria-label="下一周">›</button>
         </div>
 
-        <div class="week-grid" id="weekGrid">
-            {% for d in range(1, 8) %}
-            <div class="day-col {% if sel_is_current and d == today_weekday %}day-today{% endif %}">
-                <div class="day-head">
-                    <span class="dh-name">{{ weekdays[d - 1] }}</span>
-                    <span class="dh-date">{{ week_dates[d - 1] }}</span>
-                    {% if sel_is_current and d == today_weekday %}
-                    <span class="badge badge-teal">今天</span>
-                    {% endif %}
+        <div class="tt-scroll">
+            <div class="tt" id="weekGrid" style="--rows: {{ max_period }}">
+                {# 左上角空格 #}
+                <div class="tt-corner" aria-hidden="true">节</div>
+
+                {# 表头：星期 + 日期 #}
+                {% for d in range(1, 8) %}
+                <div class="tt-day{% if sel_is_current and d == today_weekday %} is-today{% endif %}"
+                     style="--d: {{ d }}">
+                    <span class="ttd-name">{{ weekdays[d - 1].replace("星期", "") }}</span>
+                    <span class="ttd-date">{{ week_dates[d - 1] }}</span>
                 </div>
-                {% set day_courses = week_grid[d] %}
-                {% if day_courses %}
-                    {% for c in day_courses %}
-                    <div class="mini-course mc-c{{ c.ci }}" data-day="{{ d }}" data-idx="{{ loop.index0 }}"
-                         role="button" tabindex="0" title="点击查看课程详情">
-                        <div class="mc-name">{{ c.kcmc }}</div>
-                        <div class="mc-meta"><b>{{ c.jc }}</b> · {{ c.cdmc or "地点待定" }}</div>
-                        <div class="mc-meta">{{ c.xm or "—" }} · {{ c.zcd }}</div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="day-empty">无课</div>
-                {% endif %}
+                {% endfor %}
+
+                {# 节次轴 #}
+                {% for p in range(1, max_period + 1) %}
+                <div class="tt-num" style="--p: {{ p }}">{{ p }}</div>
+                {% endfor %}
+
+                {# 日列底色（今日列微染） #}
+                {% for d in range(1, 8) %}
+                <div class="tt-colbg{% if sel_is_current and d == today_weekday %} is-today{% endif %}"
+                     style="--d: {{ d }}" aria-hidden="true"></div>
+                {% endfor %}
+
+                {# 课程块：按节次跨行 #}
+                {% for d in range(1, 8) %}
+                {% for c in week_grid[d] %}
+                <div class="tt-course mc-c{{ c.ci }}" style="--d: {{ d }}; --ps: {{ c.ps }}; --pe: {{ c.pe }}"
+                     data-day="{{ d }}" data-idx="{{ loop.index0 }}"
+                     role="button" tabindex="0" title="点击查看课程详情">
+                    <span class="ttc-jc">{{ c.jc }}</span>
+                    <span class="ttc-name">{{ c.kcmc }}</span>
+                    <span class="ttc-meta">{{ c.cdmc or "地点待定" }}</span>
+                    <span class="ttc-meta">{{ c.xm or "—" }} · {{ c.zcd }}</span>
+                </div>
+                {% endfor %}
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </section>
     {% endif %}
@@ -393,7 +407,7 @@
     }
 
     function bindGridCourses() {
-        grid.querySelectorAll(".mini-course[data-day]").forEach(function (el) {
+        grid.querySelectorAll(".tt-course[data-day]").forEach(function (el) {
             var open = function () { openCard(courseAt(el.dataset.day, +el.dataset.idx)); };
             el.addEventListener("click", open);
             el.addEventListener("keydown", function (ev) {
@@ -402,36 +416,47 @@
         });
     }
 
+    var maxPeriod = {{ max_period }};
+
     function buildGrid(w) {
         var week = weeksData[String(w)] || {};
-        var html = "";
+        var html = '<div class="tt-corner" aria-hidden="true">节</div>';
 
+        // 表头：星期 + 日期
         for (var d = 1; d <= 7; d++) {
             var isToday = (inSemester && w === currentWeek && d === todayWeekday);
+            html += '<div class="tt-day' + (isToday ? " is-today" : "") + '" style="--d:' + d + '">' +
+                '<span class="ttd-name">' + esc(weekdays[d - 1].replace("星期", "")) + "</span>" +
+                '<span class="ttd-date">' + esc(dateOf(w, d)) + "</span></div>";
+        }
 
-            html += '<div class="day-col' + (isToday ? " day-today" : "") + '">';
-            html += '<div class="day-head"><span class="dh-name">' + esc(weekdays[d - 1]) + "</span>" +
-                '<span class="dh-date">' + esc(dateOf(w, d)) + "</span>" +
-                (isToday ? '<span class="badge badge-teal">今天</span>' : "") + "</div>";
+        // 节次轴
+        for (var p = 1; p <= maxPeriod; p++) {
+            html += '<div class="tt-num" style="--p:' + p + '">' + p + "</div>";
+        }
 
-            var list = week[String(d)] || [];
+        // 日列底色
+        for (var d2 = 1; d2 <= 7; d2++) {
+            var t2 = (inSemester && w === currentWeek && d2 === todayWeekday);
+            html += '<div class="tt-colbg' + (t2 ? " is-today" : "") + '" style="--d:' + d2 + '" aria-hidden="true"></div>';
+        }
 
-            if (list.length) {
-                for (var i = 0; i < list.length; i++) {
-                    var c = list[i];
-                    html += '<div class="mini-course' + (c.ci !== undefined ? " mc-c" + c.ci : "") +
-                        '" data-day="' + d + '" data-idx="' + i + '"' +
-                        ' role="button" tabindex="0" title="点击查看课程详情">' +
-                        '<div class="mc-name">' + esc(c.kcmc) + "</div>" +
-                        '<div class="mc-meta"><b>' + esc(c.jc) + "</b> · " + esc(c.cdmc || "地点待定") + "</div>" +
-                        '<div class="mc-meta">' + esc(c.xm || "—") + " · " + esc(c.zcd) + "</div>" +
-                        "</div>";
-                }
-            } else {
-                html += '<div class="day-empty">无课</div>';
+        // 课程块
+        for (var d3 = 1; d3 <= 7; d3++) {
+            var list = week[String(d3)] || [];
+
+            for (var i = 0; i < list.length; i++) {
+                var c = list[i];
+                html += '<div class="tt-course' + (c.ci !== undefined ? " mc-c" + c.ci : "") + '"' +
+                    ' style="--d:' + d3 + ";--ps:" + c.ps + ";--pe:" + c.pe + '"' +
+                    ' data-day="' + d3 + '" data-idx="' + i + '"' +
+                    ' role="button" tabindex="0" title="点击查看课程详情">' +
+                    '<span class="ttc-jc">' + esc(c.jc) + "</span>" +
+                    '<span class="ttc-name">' + esc(c.kcmc) + "</span>" +
+                    '<span class="ttc-meta">' + esc(c.cdmc || "地点待定") + "</span>" +
+                    '<span class="ttc-meta">' + esc(c.xm || "—") + " · " + esc(c.zcd) + "</span>" +
+                    "</div>";
             }
-
-            html += "</div>";
         }
 
         return html;

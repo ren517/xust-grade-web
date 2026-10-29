@@ -245,6 +245,29 @@ def parse_jc(jc):
     return int(m.group()) if m else 99
 
 
+def parse_jc_span(jc):
+    """
+    '1-2节' → (1, 2)；'第3节' → (3, 3)；解析失败 → (99, 99)。
+    返回 (起始节次, 结束节次)，供时间网格布局使用。
+    """
+    nums = re.findall(r"\d+", str(jc or ""))
+
+    if not nums:
+        return 99, 99
+
+    a, b = int(nums[0]), int(nums[1]) if len(nums) >= 2 else int(nums[0])
+
+    return (b, a) if b < a else (a, b)
+
+
+def max_period(kb_list, default=12):
+    """课表中出现过的最大结束节次，决定时间网格行数；无数据回退 default"""
+    ends = [parse_jc_span(c.get("jc"))[1] for c in kb_list or []]
+    ends = [p for p in ends if p < 99]
+
+    return max(ends) if ends else default
+
+
 def _weekday_of(course):
     """课程记录对应的星期（1-7），优先 xqj 数字字段，其次 xqjmc 中文"""
     xqj = str(course.get("xqj", "")).strip()
@@ -280,8 +303,21 @@ def courses_on(kb_list, weekday, week=None):
 
 
 def week_grid(kb_list, week=None):
-    """{1: [...], ..., 7: [...]} 一周课表，按节次排序"""
-    return {d: courses_on(kb_list, d, week) for d in range(1, 8)}
+    """
+    {1: [...], ..., 7: [...]} 一周课表，按节次排序。
+    每条记录附带 ps/pe（起始/结束节次），供时间网格跨行布局。
+    """
+    grid = {}
+
+    for d in range(1, 8):
+        items = courses_on(kb_list, d, week)
+
+        for c in items:
+            c["ps"], c["pe"] = parse_jc_span(c.get("jc"))
+
+        grid[d] = items
+
+    return grid
 
 
 def unique_courses(kb_list):

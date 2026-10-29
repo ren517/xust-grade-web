@@ -979,82 +979,126 @@ tr.row-new:hover td { background: rgb(253 243 227 / .85); }
 }
 .chip-soft { color: var(--muted); background: transparent; border: 1px dashed var(--line); }
 
-/* ---------- 本周课表网格 ---------- */
-.week-grid {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(150px, 1fr));
-    gap: 10px;
+/* ---------- 本周课表（节次时间网格） ---------- */
+.tt-scroll {
     overflow-x: auto;
-    padding: 2px 2px 10px;
+    padding: 2px 2px 12px;
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
 }
-.week-grid::-webkit-scrollbar { height: 8px; }
-.week-grid::-webkit-scrollbar-thumb {
+.tt-scroll::-webkit-scrollbar { height: 8px; }
+.tt-scroll::-webkit-scrollbar-thumb {
     background: var(--line);
     border-radius: 999px;
 }
-.week-grid::-webkit-scrollbar-track { background: transparent; }
+.tt-scroll::-webkit-scrollbar-track { background: transparent; }
 
-.day-col {
-    --dc-bg: var(--surface-soft);
-    background: var(--dc-bg);
-    border: 1px solid transparent;
-    border-radius: 14px;
-    padding: 12px 10px 12px;
-    min-height: 130px;
-    transition: box-shadow var(--t-med) var(--ease-out), border-color var(--t-med) var(--ease-out),
-                background var(--t-med) var(--ease-out);
+.tt {
+    --rh: 56px;   /* 单节行高 */
+    --hh: 54px;   /* 表头高 */
+    --cw: 132px;  /* 日列最小宽 */
+    display: grid;
+    grid-template-columns: 34px repeat(7, minmax(var(--cw), 1fr));
+    grid-template-rows: var(--hh) repeat(var(--rows, 12), var(--rh));
+    gap: 5px 6px;
+    min-width: 1010px;
 }
 
-.day-today {
-    --dc-bg: linear-gradient(180deg, var(--primary-soft), var(--surface) 62%);
-    border-color: rgb(79 70 229 / .35);
-    box-shadow: 0 0 0 3px rgb(79 70 229 / .07), var(--shadow-1);
-}
-
-.day-head {
+.tt-corner {
+    grid-row: 1;
+    grid-column: 1;
     display: flex;
-    align-items: baseline;
-    gap: 6px;
-    padding: 0 3px 10px;
-    margin-bottom: 10px;
-    border-bottom: 1px dashed var(--line);
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #b6bad0;
 }
-.dh-name {
+
+/* 表头：星期 + 日期 */
+.tt-day {
+    grid-row: 1;
+    grid-column: calc(var(--d) + 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    border-radius: var(--r-sm);
+    transition: background var(--t-med) var(--ease-out);
+}
+.ttd-name {
     font-family: var(--font-display);
     font-weight: 700;
     font-size: 13.5px;
-    color: var(--ink);
+    color: var(--ink-2);
+    line-height: 1.3;
 }
-.dh-date {
+.ttd-date {
     font-family: var(--font-display);
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--muted);
     letter-spacing: .02em;
+    line-height: 1.3;
 }
-.day-today .dh-name { color: var(--primary-ink); }
-.day-today .dh-date { color: var(--primary); }
+.tt-day.is-today {
+    background: linear-gradient(135deg, var(--primary), var(--primary-2));
+    box-shadow: 0 4px 12px -4px rgb(79 70 229 / .5);
+}
+.tt-day.is-today .ttd-name,
+.tt-day.is-today .ttd-date { color: #fff; }
 
-.mini-course {
+/* 节次轴 */
+.tt-num {
+    grid-column: 1;
+    grid-row: calc(var(--p) + 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #b6bad0;
+}
+
+/* 日列底色：让一天的「形状」可见 */
+.tt-colbg {
+    grid-column: calc(var(--d) + 1);
+    grid-row: 2 / calc(var(--rows, 12) + 2);
+    background: var(--surface-soft);
+    border-radius: 12px;
+}
+.tt-colbg.is-today {
+    background: linear-gradient(180deg, var(--primary-soft), rgb(238 240 255 / .3));
+}
+
+/* 课程块：按节次跨行 */
+.tt-course {
     --ac: var(--primary);
     --ac-soft: var(--primary-soft);
-    padding: 9px 11px 10px;
-    margin-bottom: 8px;
+    z-index: 1;
+    grid-column: calc(var(--d) + 1);
+    grid-row: calc(var(--ps) + 1) / calc(var(--pe) + 2);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 7px 10px 8px 12px;
     border-radius: 10px;
     background: var(--ac-soft);
     border-left: 3px solid var(--ac);
     cursor: pointer;
+    overflow: hidden;
     transition: transform var(--t-fast) var(--ease-out),
                 box-shadow var(--t-fast) var(--ease-out);
 }
-.mini-course:hover {
-    transform: translateY(-2px);
+.tt-course:hover {
+    transform: translateY(-1px);
     box-shadow: 0 10px 20px -10px var(--ac);
+    z-index: 2;
 }
-.mini-course:active { transform: translateY(0) scale(.98); }
-.mini-course:last-child { margin-bottom: 0; }
+.tt-course:active { transform: none; }
 
 /* 课程配色（按课程名稳定哈希，8 色循环） */
 .mc-c0 { --ac: #4f46e5; --ac-soft: #eef0ff; }
@@ -1069,17 +1113,24 @@ tr.row-new:hover td { background: rgb(253 243 227 / .85); }
 /* 今日课程卡片可点击 */
 .slot-clickable { cursor: pointer; }
 
-.mc-name { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; }
-.mc-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-.mc-meta b { color: var(--ac); font-weight: 700; }
+/* 节次信息由左侧节次轴表达，块内不再重复 */
+.ttc-jc { display: none; }
 
-.day-empty {
-    padding: 20px 0;
-    text-align: center;
-    font-size: 12px;
-    color: #b6bad0;
-    letter-spacing: .12em;
+.ttc-name {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.35;
 }
+.ttc-meta {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tt-course:hover .ttc-meta { color: var(--ink-2); }
 
 /* ---------- 进度追踪 ---------- */
 .progress-card { margin-bottom: 8px; }
@@ -1228,13 +1279,15 @@ tr.row-new:hover td { background: rgb(253 243 227 / .85); }
 
 /* ---------- 响应式补充 ---------- */
 @media (max-width: 1000px) {
-    .week-grid { grid-template-columns: repeat(7, minmax(132px, 1fr)); }
+    .tt { --cw: 118px; min-width: 900px; }
 }
 
 @media (max-width: 860px) {
-    .week-grid { grid-template-columns: 1fr; overflow-x: visible; }
-    .day-col { min-height: 0; }
-    .day-empty { padding: 8px 0; }
+    .tt { --rh: 48px; --hh: 48px; --cw: 108px; min-width: 810px; }
+    .ttc-name { font-size: 12px; }
+    .ttc-meta { display: none; }
+    /* 小屏只保留「地点」一行（ttc-jc/ttc-name 是前面的 span 兄弟） */
+    .tt-course span:nth-of-type(3) { display: block; }
 }
 
 @media (max-width: 640px) {

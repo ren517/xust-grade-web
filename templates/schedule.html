@@ -101,25 +101,26 @@
                     {% if fetched_at %} · 数据同步于 {{ fetched_at }}{% endif %}
                 </p>
             </div>
-            <div class="week-nav">
-                <button type="button" class="wn-btn" id="prevWeek" aria-label="上一周">‹</button>
-                <button type="button" class="wn-btn" id="nextWeek" aria-label="下一周">›</button>
-            </div>
         </div>
 
-        <div class="week-tabs" id="weekTabs" role="tablist" aria-label="周次切换">
-            {% for wk in weeks %}
-            <button type="button" class="wtab{% if wk == sel_week %} is-active{% endif %}"
-                    role="tab" data-week="{{ wk }}"
-                    aria-selected="{{ 'true' if wk == sel_week else 'false' }}">第{{ wk }}周</button>
-            {% endfor %}
+        <div class="week-toolbar">
+            <button type="button" class="wn-btn" id="prevWeek" aria-label="上一周">‹</button>
+            <div class="week-tabs" id="weekTabs" role="tablist" aria-label="周次切换">
+                {% for wk in weeks %}
+                <button type="button" class="wtab{% if wk == sel_week %} is-active{% endif %}{% if in_semester and wk == semester_week %} is-current{% endif %}"
+                        role="tab" data-week="{{ wk }}"
+                        aria-selected="{{ 'true' if wk == sel_week else 'false' }}">第{{ wk }}周</button>
+                {% endfor %}
+            </div>
+            <button type="button" class="wn-btn" id="nextWeek" aria-label="下一周">›</button>
         </div>
 
         <div class="week-grid" id="weekGrid">
             {% for d in range(1, 8) %}
             <div class="day-col {% if sel_is_current and d == today_weekday %}day-today{% endif %}">
                 <div class="day-head">
-                    {{ weekdays[d - 1] }}
+                    <span class="dh-name">{{ weekdays[d - 1] }}</span>
+                    <span class="dh-date">{{ week_dates[d - 1] }}</span>
                     {% if sel_is_current and d == today_weekday %}
                     <span class="badge badge-teal">今天</span>
                     {% endif %}
@@ -127,10 +128,10 @@
                 {% set day_courses = week_grid[d] %}
                 {% if day_courses %}
                     {% for c in day_courses %}
-                    <div class="mini-course" data-day="{{ d }}" data-idx="{{ loop.index0 }}"
+                    <div class="mini-course mc-c{{ c.ci }}" data-day="{{ d }}" data-idx="{{ loop.index0 }}"
                          role="button" tabindex="0" title="点击查看课程详情">
                         <div class="mc-name">{{ c.kcmc }}</div>
-                        <div class="mc-meta">{{ c.jc }} · {{ c.cdmc or "地点待定" }}</div>
+                        <div class="mc-meta"><b>{{ c.jc }}</b> · {{ c.cdmc or "地点待定" }}</div>
                         <div class="mc-meta">{{ c.xm or "—" }} · {{ c.zcd }}</div>
                     </div>
                     {% endfor %}
@@ -300,6 +301,17 @@
     var currentWeek = {{ semester_week }};
     var inSemester = {{ 'true' if in_semester else 'false' }};
     var weekdays = {{ weekdays | tojson }};
+    var semStart = "{{ semester_start }}";
+
+    // 某周星期 d 的日期标签（M/D）
+    function dateOf(w, d) {
+        var p = semStart.split("-");
+        if (p.length !== 3) return "";
+        var s = new Date(+p[0], +p[1] - 1, +p[2]);
+        if (isNaN(s.getTime())) return "";
+        s.setDate(s.getDate() + (w - 1) * 7 + (d - 1));
+        return (s.getMonth() + 1) + "/" + s.getDate();
+    }
 
     var tabs = document.getElementById("weekTabs");
     var grid = document.getElementById("weekGrid");
@@ -398,7 +410,8 @@
             var isToday = (inSemester && w === currentWeek && d === todayWeekday);
 
             html += '<div class="day-col' + (isToday ? " day-today" : "") + '">';
-            html += '<div class="day-head">' + esc(weekdays[d - 1]) +
+            html += '<div class="day-head"><span class="dh-name">' + esc(weekdays[d - 1]) + "</span>" +
+                '<span class="dh-date">' + esc(dateOf(w, d)) + "</span>" +
                 (isToday ? '<span class="badge badge-teal">今天</span>' : "") + "</div>";
 
             var list = week[String(d)] || [];
@@ -406,10 +419,11 @@
             if (list.length) {
                 for (var i = 0; i < list.length; i++) {
                     var c = list[i];
-                    html += '<div class="mini-course" data-day="' + d + '" data-idx="' + i + '"' +
+                    html += '<div class="mini-course' + (c.ci !== undefined ? " mc-c" + c.ci : "") +
+                        '" data-day="' + d + '" data-idx="' + i + '"' +
                         ' role="button" tabindex="0" title="点击查看课程详情">' +
                         '<div class="mc-name">' + esc(c.kcmc) + "</div>" +
-                        '<div class="mc-meta">' + esc(c.jc) + " · " + esc(c.cdmc || "地点待定") + "</div>" +
+                        '<div class="mc-meta"><b>' + esc(c.jc) + "</b> · " + esc(c.cdmc || "地点待定") + "</div>" +
                         '<div class="mc-meta">' + esc(c.xm || "—") + " · " + esc(c.zcd) + "</div>" +
                         "</div>";
                 }
